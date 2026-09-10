@@ -1,16 +1,26 @@
-from fastapi import APIRouter
-from app.core.exceptions import AppException
+from typing import Annotated
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.health import check_database_connection
+from app.db.session import get_db_session
+
 router = APIRouter()
 
-#testing error handling
-""" @router.get("/test-error")
-async def test_error() -> None:
-    raise AppException(
-        code="TEST_ERROR",
-        message="This is a test application error.",
-        status_code=400,
-    ) """
 
 @router.get("")
-async def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+async def health_check(
+   session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, str]:
+    database_ok = await check_database_connection(session)
+
+    if not database_ok:
+        return {
+            "status": "degraded",
+            "database": "unhealthy",
+        }
+
+    return {
+        "status": "ok",
+        "database": "ok",
+    }

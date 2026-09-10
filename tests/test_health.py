@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-
 client = TestClient(app)
 
 
@@ -14,10 +13,13 @@ def test_health_check_returns_200() -> None:
     assert response.status_code == 200
 
 
-def test_health_check_returns_expected_body() -> None:
+def test_health_check_reports_database() -> None:
     response = client.get("/api/v1/health")
 
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "database": "ok",
+    }
 
 
 def test_request_id_is_propagated() -> None:
