@@ -24,6 +24,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import APIRouter, Depends, HTTPException, status
 
 
+
 security = HTTPBearer()
 
 router = APIRouter()
@@ -63,9 +64,10 @@ async def verify_otp(
     )
 
     if otp_record is None:
-        return {
-            "message": "Invalid or expired OTP",
-        }
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP",
+        )
 
     otp_service = OTPService(otp_repository)
 
@@ -80,9 +82,10 @@ async def verify_otp(
         OTPAlreadyVerifiedError,
         OTPAttemptsExceededError,
     ):
-        return {
-            "message": "Invalid or expired OTP",
-        }
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP",
+        )
 
     # Find existing user
     user_repository = UserRepository(session)
