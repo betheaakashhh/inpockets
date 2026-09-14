@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import get_settings
 from app.db.base import Base
 from app.models.user import User
+from app.models.otp_verification import OTPVerification
 
 print(Base.metadata.tables.keys())
 

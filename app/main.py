@@ -1,4 +1,11 @@
+import asyncio
+import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
 import logging
+
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
