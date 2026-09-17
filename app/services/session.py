@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
@@ -50,14 +51,14 @@ class SessionService:
         self.repository = repository
 
     async def create_session(
-        self,
-        *,
-        user_id,
-    ) -> tuple[
-        UserSession,
-        str,
-        str,
-    ]:
+    self,
+    *,
+    user_id,
+    device_name: str | None = None,
+    device_type: str | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> tuple[UserSession, str, str]:
         access_token = generate_access_token()
         refresh_token = generate_refresh_token()
 
@@ -76,13 +77,21 @@ class SessionService:
             + timedelta(days=REFRESH_TOKEN_EXPIRY_DAYS)
         )
 
+        token_family_id = uuid.uuid4()
+
         user_session = await self.repository.create(
-            user_id=user_id,
-            access_token_hash=access_token_hash,
-            refresh_token_hash=refresh_token_hash,
-            access_token_expires_at=access_token_expires_at,
-            refresh_token_expires_at=refresh_token_expires_at,
-        )
+        user_id=user_id,
+        token_family_id=token_family_id,
+        access_token_hash=access_token_hash,
+        refresh_token_hash=refresh_token_hash,
+        access_token_expires_at=access_token_expires_at,
+        refresh_token_expires_at=refresh_token_expires_at,
+        device_name=device_name,
+        device_type=device_type,
+        ip_address=ip_address,
+        user_agent=user_agent,
+)
+        
 
         return (
             user_session,
@@ -94,6 +103,14 @@ class SessionService:
         self,
         user_session: UserSession,
     ) -> tuple[UserSession, str, str]:
+
+        # The current session is the token that was just used.
+        # Mark it as rotated so reuse can be detected later.
+        await self.repository.revoke(
+            user_session,
+            reason="rotated",
+        )
+
         access_token = generate_access_token()
         refresh_token = generate_refresh_token()
 
@@ -112,12 +129,13 @@ class SessionService:
             + timedelta(days=REFRESH_TOKEN_EXPIRY_DAYS)
         )
 
-        user_session = await self.repository.rotate_tokens(
-            user_session,
+        new_session = await self.repository.create(
+            user_id=user_session.user_id,
+            token_family_id=user_session.token_family_id,
             access_token_hash=access_token_hash,
             refresh_token_hash=refresh_token_hash,
             access_token_expires_at=access_token_expires_at,
             refresh_token_expires_at=refresh_token_expires_at,
         )
 
-        return user_session, access_token, refresh_token
+        return new_session, access_token, refresh_token

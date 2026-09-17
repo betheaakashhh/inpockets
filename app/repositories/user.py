@@ -13,11 +13,8 @@ class UserRepository:
         phone_number: str,
     ) -> User | None:
         result = await self.session.execute(
-            select(User).where(
-                User.phone_number == phone_number
-            )
+            select(User).where(User.phone_number == phone_number)
         )
-
         return result.scalar_one_or_none()
 
     async def get_by_id(
@@ -25,11 +22,8 @@ class UserRepository:
         user_id,
     ) -> User | None:
         result = await self.session.execute(
-            select(User).where(
-                User.id == user_id
-            )
+            select(User).where(User.id == user_id)
         )
-
         return result.scalar_one_or_none()
 
     async def create(
@@ -37,11 +31,22 @@ class UserRepository:
         *,
         phone_number: str,
     ) -> User:
-        user = User(
-            phone_number=phone_number,
-        )
+        user = User(phone_number=phone_number)
 
         self.session.add(user)
+
+        await self.session.flush()
+
+        return user
+
+    async def update_status(
+        self,
+        user: User,
+        *,
+        status: str,
+    ) -> User:
+        user.status = status
+
         await self.session.flush()
 
         return user

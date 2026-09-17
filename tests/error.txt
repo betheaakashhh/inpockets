@@ -1,0 +1,2639 @@
+ pytest -q tests/test_auth.py
+..F..F..F.F.F.F.F.F.FF                               [100%]
+======================== FAILURES =========================
+_____________________ test_verify_otp _____________________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=980>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADCE72EA0>
+
+    def test_verify_otp(monkeypatch) -> None:
+        otp = "123456"
+
+>       request_otp_for_test(
+            "9876543210",
+            monkeypatch,
+            otp,
+        )
+
+tests\test_auth.py:67:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+__________ test_authenticated_user_can_access_me __________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=836>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADCEFDEB0>
+
+    def test_authenticated_user_can_access_me(monkeypatch) -> None:
+        otp = "123456"
+
+>       request_otp_for_test(
+            "9876543213",
+            monkeypatch,
+            otp,
+        )
+
+tests\test_auth.py:123:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+_______________ test_logout_revokes_session _______________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=548>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADCF6D7B0>
+
+    def test_logout_revokes_session(monkeypatch) -> None:
+        otp = "123456"
+
+>       request_otp_for_test(
+            "9876543215",
+            monkeypatch,
+            otp,
+        )
+
+tests\test_auth.py:199:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+_______ test_expired_access_token_cannot_access_me ________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=1008>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADD067850>
+
+    def test_expired_access_token_cannot_access_me(monkeypatch) -> None:
+        otp = "123456"
+
+>       request_otp_for_test(
+            "9876543217",
+            monkeypatch,
+            otp,
+        )
+
+tests\test_auth.py:276:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+________ test_expired_refresh_token_cannot_be_used ________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=884>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADD041D60>
+
+    def test_expired_refresh_token_cannot_be_used(monkeypatch) -> None:
+        otp = "123456"
+
+>       request_otp_for_test(
+            "9876543219",
+            monkeypatch,
+            otp,
+        )
+
+tests\test_auth.py:373:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+_____________ test_expired_otp_cannot_be_used _____________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=880>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADCF5B230>
+
+    def test_expired_otp_cannot_be_used(monkeypatch) -> None:
+        otp = "123456"
+
+>       request_otp_for_test(
+            "9876543221",
+            monkeypatch,
+            otp,
+        )
+
+tests\test_auth.py:458:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+__________ test_newest_otp_replaces_previous_otp __________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=1072>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADCF8FA10>
+
+    def test_newest_otp_replaces_previous_otp(monkeypatch) -> None:
+        phone_number = "9876543231"
+
+        monkeypatch.setattr(
+            otp_service.settings,
+            "otp_resend_cooldown_seconds",
+            0,
+        )
+
+        otps = iter(["123456", "654321"])
+
+        monkeypatch.setattr(
+            otp_service,
+            "generate_otp",
+            lambda: next(otps),
+        )
+
+>       first_response = client.post(
+            "/api/v1/auth/request-otp",
+            json={"phone_number": phone_number},
+        )
+
+tests\test_auth.py:547:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+_____________ test_user_status_can_be_changed _____________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=1012>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADD056BA0>
+
+    def test_user_status_can_be_changed(monkeypatch) -> None:
+        otp = "123456"
+
+>       request_otp_for_test(
+            "9876543225",
+            monkeypatch,
+            otp,
+        )
+
+tests\test_auth.py:632:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+_________ test_request_otp_resend_is_rate_limited _________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=548>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADD0389B0>
+
+    def test_request_otp_resend_is_rate_limited(monkeypatch) -> None:
+        phone_number = "9876543230"
+
+>       request_otp_for_test(
+            phone_number,
+            monkeypatch,
+            "123456",
+        )
+
+tests\test_auth.py:724:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+_______________ test_request_otp_rate_limit _______________
+
+self = <redis.asyncio.connection.Connection(host=localhost,port=6379,db=0)>
+disable_decoding = False, timeout = None
+disconnect_on_error = True, push_request = False
+
+    async def read_response(
+        self,
+        disable_decoding: bool = False,
+        timeout: float | None = None,
+        *,
+        disconnect_on_error: bool = True,
+        push_request: bool | None = False,
+    ):
+        """Read the response from a previously sent command.
+
+        ``timeout`` semantics:
+        - ``None`` (default): fall back to ``self.socket_timeout``.
+        - ``math.inf``: block indefinitely with no timeout. Used by PubSub
+          blocking reads (``listen()`` / ``get_message(timeout=None)`` /
+          ``parse_response(block=True)``) where the configured
+          ``socket_timeout`` must not abort the read.
+        - ``float``: apply that timeout in seconds for this single read.
+
+        TODO(next-major): replace the ``math.inf`` opt-in with a SENTINEL
+        default for ``timeout``. After that change, ``timeout=None`` will
+        mean "no timeout, block until a response arrives" (matching the
+        long-standing PubSub docstring contract) and the SENTINEL default
+        will be the value that falls back to ``self.socket_timeout``.
+        That swap is a breaking change, so it must wait for a major
+        release. Until then, callers that need an indefinitely blocking
+        read pass ``math.inf`` explicitly.
+        """
+        # TODO(next-major): drop the math.inf branch. Use SENTINEL as the
+        # default for ``timeout`` and treat ``timeout is None`` as the
+        # "no timeout" signal (matching the PubSub docstring contract).
+        # Match only positive infinity here. ``-math.inf`` is not a valid
+        # "block forever" signal and historically behaved as an already-
+        # expired timeout; preserve that.
+        if timeout == math.inf:
+            read_timeout = None
+        else:
+            read_timeout = timeout if timeout is not None else self.socket_timeout
+        host_error = self._host_error()
+        try:
+            if read_timeout is not None:
+                timeout_context = async_timeout(read_timeout)
+                if timeout is None:
+                    async with timeout_context as active_timeout:
+                        self._active_read_timeout = active_timeout
+                        try:
+>                           response = await self._read_response_from_parser(
+                                disable_decoding=disable_decoding,
+                                push_request=push_request,
+                            )
+
+.venv\Lib\site-packages\redis\asyncio\connection.py:1286:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\redis\asyncio\connection.py:1335: in _read_response_from_parser
+    return await self._parser.read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:185: in read_response
+    response = await self._read_response(
+.venv\Lib\site-packages\redis\_parsers\resp3.py:197: in _read_response
+    raw = await self._readline()
+          ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\_parsers\base.py:587: in _readline
+    data = await self._stream.readline()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:569: in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:684: in readuntil
+    await self._wait_for_data('readuntil')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <StreamReader transport=<_SelectorSocketTransport closing fd=996>>
+func_name = 'readuntil'
+
+    async def _wait_for_data(self, func_name):
+        """Wait until feed_data() or feed_eof() is called.
+
+        If stream was paused, automatically resume it.
+        """
+        # StreamReader uses a future to link the protocol feed_data() method
+        # to a read coroutine. Running two read coroutines at the same time
+        # would have an unexpected behaviour. It would not possible to know
+        # which coroutine would get the next data.
+        if self._waiter is not None:
+            raise RuntimeError(
+                f'{func_name}() called while another coroutine is '
+                f'already waiting for incoming data')
+
+        assert not self._eof, '_wait_for_data after EOF'
+
+        # Waiting for data while paused will make deadlock, so prevent it.
+        # This is essential for readexactly(n) for case when n > self._limit.
+        if self._paused:
+            self._paused = False
+            self._transport.resume_reading()
+
+        self._waiter = self._loop.create_future()
+        try:
+>           await self._waiter
+E           RuntimeError: Task <Task pending name='starlette.middleware.base.BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.coro' coro=<TaskHandle._run_coro() running at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_core\_tasks.py:327> cb=[TaskGroup._spawn.<locals>.task_done() at E:\inpockets\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:870]> got Future <Future pending> attached to a different loop
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:546: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001DADD91A490>
+
+    def test_request_otp_rate_limit(monkeypatch) -> None:
+        phone_number = "9876500001"
+
+        for _ in range(5):
+>           request_otp_for_test(
+                phone_number,
+                monkeypatch,
+            )
+
+tests\test_auth.py:746:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_auth.py:33: in request_otp_for_test
+    response = client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\middleware.py:24: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1791: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\api\v1\auth.py:44: in request_otp
+    _, otp = await service.create_otp(
+app\services\otp.py:89: in create_otp
+    await self.check_request_rate_limit(phone_number=phone_number)
+app\services\otp.py:70: in check_request_rate_limit
+    count = await redis_client.incr(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:946: in execute_command
+    result = await conn.retry.call_with_retry(
+.venv\Lib\site-packages\redis\asyncio\retry.py:69: in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:871: in _send_command_parse_response
+    return await self.parse_response(conn, command_name, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\client.py:993: in parse_response
+    response = await connection.read_response()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\redis\asyncio\connection.py:1320: in read_response
+    await self.disconnect(nowait=True)
+.venv\Lib\site-packages\redis\asyncio\connection.py:1095: in disconnect
+    self._writer.close()  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\streams.py:355: in close
+    return self._transport.close()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:1218: in close
+    super().close()
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\selector_events.py:871: in close
+    self._loop.call_soon(self._call_connection_lost, None)
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:828: in call_soon
+    self._check_closed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_WindowsSelectorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Users\Dell\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:551: RuntimeError
+------------------ Captured stdout call -------------------
+2026-09-16 16:44:13,355 | INFO | app.core.middleware | request_id=600fc224-8e4d-4d91-b3c7-b4c0553a140c method=POST path=/api/v1/auth/request-otp status=200
+2026-09-16 16:44:13,357 | INFO | httpx | HTTP Request: POST http://testserver/api/v1/auth/request-otp "HTTP/1.1 200 OK"
+-------------------- Captured log call --------------------
+INFO     app.core.middleware:middleware.py:28 request_id=600fc224-8e4d-4d91-b3c7-b4c0553a140c method=POST path=/api/v1/auth/request-otp status=200
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/auth/request-otp "HTTP/1.1 200 OK"
+==================== warnings summary =====================
+tests\conftest.py:15
+  E:\inpockets\backend\tests\conftest.py:15: DeprecationWarning: 'asyncio.WindowsSelectorEventLoopPolicy' is deprecated and slated for removal in Python 3.16
+    asyncio.WindowsSelectorEventLoopPolicy()
+
+tests\conftest.py:14
+  E:\inpockets\backend\tests\conftest.py:14: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(
+
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  E:\inpockets\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv\Lib\site-packages\starlette\testclient.py:53
+  E:\inpockets\backend\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+app\main.py:5
+  E:\inpockets\backend\app\main.py:5: DeprecationWarning: 'asyncio.WindowsSelectorEventLoopPolicy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+app\main.py:5
+  E:\inpockets\backend\app\main.py:5: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= short test summary info =================
+FAILED tests/test_auth.py::test_verify_otp - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_authenticated_user_can_access_me - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_logout_revokes_session - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_expired_access_token_cannot_access_me - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_expired_refresh_token_cannot_be_used - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_expired_otp_cannot_be_used - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_newest_otp_replaces_previous_otp - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_user_status_can_be_changed - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_request_otp_resend_is_rate_limited - RuntimeError: Event loop is closed
+FAILED tests/test_auth.py::test_request_otp_rate_limit - RuntimeError: Event loop is closed
+10 failed, 12 passed, 6 warnings in 13.36s
+(.venv) PS E:\inpockets\backend>

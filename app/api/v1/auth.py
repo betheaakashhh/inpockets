@@ -1,25 +1,27 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
 from app.db.session import get_db_session
 from app.repositories.otp_verification import OTPVerificationRepository
-from app.schemas.auth import RequestOTPRequest, VerifyOTPRequest
+from app.schemas.auth import RequestOTPRequest, VerifyOTPRequest, RefreshTokenRequest
 from app.services.otp import (
     OTPAlreadyVerifiedError,
     OTPAttemptsExceededError,
     OTPExpiredError,
     OTPInvalidError,
     OTPService,
+    OTPCooldownError,
+    OTPRateLimitError
 )
-from app.core.auth import security
-from app.db.session import get_db_session
+from app.core.auth import security, get_current_user
 from app.repositories.user import UserRepository
 from app.repositories.user_session import UserSessionRepository
-from app.services.session import SessionService
-from app.core.auth import get_current_user
-from app.services.session import hash_token, SessionService
-from app.schemas.auth import RefreshTokenRequest
+from app.services.session import SessionService, hash_token
+
+ 
+
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -38,22 +40,33 @@ async def request_otp(
     repository = OTPVerificationRepository(session)
     service = OTPService(repository)
 
-    _, otp = await service.create_otp(
+    try:
+     _, otp = await service.create_otp(
         phone_number=request.phone_number,
         purpose="login",
     )
+    except OTPCooldownError as exc:
+     raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=str(exc),
+    ) 
+    except OTPRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        )from exc
 
     await session.commit()
 
     return {
-        "message": "OTP generated successfully",
-        "otp": otp,
-    }
+    "message": "OTP sent successfully",
+}
 
 #verify otp endpoint
 @router.post("/verify-otp", status_code=status.HTTP_200_OK)
 async def verify_otp(
     request: VerifyOTPRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_db_session),
 ):
     otp_repository = OTPVerificationRepository(session)
@@ -76,13 +89,19 @@ async def verify_otp(
             record=otp_record,
             otp=request.otp,
         )
+    except OTPInvalidError:
+        await session.commit()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP",
+        )
     except (
-        OTPInvalidError,
         OTPExpiredError,
         OTPAlreadyVerifiedError,
         OTPAttemptsExceededError,
     ):
-        raise HTTPException(
+      raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OTP",
         )
@@ -110,8 +129,12 @@ async def verify_otp(
 
     user_session, access_token, refresh_token = (
         await session_service.create_session(
-            user_id=user.id,
-        )
+        user_id=user.id,
+        device_name=request.device_name,
+        device_type=request.device_type,
+        ip_address=http_request.client.host if http_request.client else None,
+        user_agent=http_request.headers.get("user-agent"),
+)
     )
 
     await session.commit()
@@ -186,6 +209,19 @@ async def refresh_token(
         )
 
     if user_session.revoked_at is not None:
+        if user_session.revocation_reason == "rotated":
+            await session_repository.revoke_token_family(
+                user_session.token_family_id,
+                reason="reuse_detected",
+            )
+
+            await session.commit()
+
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token reuse detected",
+            )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session has been revoked",

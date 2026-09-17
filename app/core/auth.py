@@ -18,7 +18,6 @@ async def get_current_user(
     session: AsyncSession = Depends(get_db_session),
 ) -> User:
     token = credentials.credentials
-
     token_hash = hash_token(token)
 
     session_repository = UserSessionRepository(session)
@@ -49,14 +48,18 @@ async def get_current_user(
 
     user_repository = UserRepository(session)
 
-    user = await user_repository.get_by_id(
-        user_session.user_id
-    )
+    user = await user_repository.get_by_id(user_session.user_id)
 
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
+        )
+
+    if user.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is not active",
         )
 
     return user

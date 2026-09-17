@@ -37,19 +37,24 @@ async def app_exception_handler(
     request: Request,
     exc: AppException,
 ) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+
     logger.warning(
-        "Application error: code=%s, message=%s, status_code=%d, path=%s",
+        "Application error: code=%s, message=%s, status_code=%d, path=%s, request_id=%s",
         exc.code,
         exc.message,
         exc.status_code,
         request.url.path,
+        request_id,
     )
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": {
                 "code": exc.code,
                 "message": exc.message,
+                "request_id": request_id,
             }
         },
     )

@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     redis_url: str
 
     jwt_secret_key: str
+    otp_resend_cooldown_seconds: int = 60
+    otp_request_limit: int = 5
+    otp_request_window_seconds: int = 3600
+    sms_provider: str = "development"
+    msg91_auth_key: str | None = None
+    msg91_otp_template_id: str | None = None
+    msg91_otp_sender_id: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
