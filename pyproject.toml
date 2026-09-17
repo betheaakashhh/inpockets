@@ -17,6 +17,7 @@ dependencies = [
     "psycopg[binary]",
     "alembic",
     "redis",
+    "httpx",
 ]
 
 [project.optional-dependencies]
