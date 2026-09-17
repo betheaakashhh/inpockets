@@ -1,6 +1,7 @@
 from app.core import sms as sms_module
 from app.providers.development_sms import DevelopmentSMSProvider
 from app.providers.production_sms import ProductionSMSProvider
+from app.providers.twilio_sms import TwilioSMSProvider
 
 
 def test_development_sms_provider_selected(monkeypatch) -> None:
@@ -15,6 +16,21 @@ def test_development_sms_provider_selected(monkeypatch) -> None:
     assert isinstance(
         provider,
         DevelopmentSMSProvider,
+    )
+
+
+def test_twilio_sms_provider_selected(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sms_module.settings,
+        "sms_provider",
+        "twilio",
+    )
+
+    provider = sms_module.create_sms_provider()
+
+    assert isinstance(
+        provider,
+        TwilioSMSProvider,
     )
 
 
