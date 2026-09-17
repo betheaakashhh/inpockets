@@ -1,34 +1,34 @@
+import ipaddress
 from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
+from app.core.auth import get_current_user
 from app.db.session import get_db_session
+from app.models.user import User
 from app.repositories.otp_verification import OTPVerificationRepository
-from app.schemas.auth import RequestOTPRequest, VerifyOTPRequest, RefreshTokenRequest
+from app.repositories.user import UserRepository
+from app.repositories.user_session import UserSessionRepository
+from app.schemas.auth import (
+    RefreshTokenRequest,
+    RequestOTPRequest,
+    VerifyOTPRequest,
+)
 from app.services.otp import (
     OTPAlreadyVerifiedError,
     OTPAttemptsExceededError,
     OTPExpiredError,
     OTPInvalidError,
+    OTPRateLimitError,
     OTPService,
     OTPCooldownError,
-    OTPRateLimitError
 )
-from app.core.auth import security, get_current_user
-from app.repositories.user import UserRepository
-from app.repositories.user_session import UserSessionRepository
 from app.services.session import SessionService, hash_token
-
- 
-
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi import APIRouter, Depends, HTTPException, status
-
 
 
 security = HTTPBearer()
-
 router = APIRouter()
 
 
@@ -41,28 +41,29 @@ async def request_otp(
     service = OTPService(repository)
 
     try:
-     _, otp = await service.create_otp(
-        phone_number=request.phone_number,
-        purpose="login",
-    )
+        await service.create_otp(
+            phone_number=request.phone_number,
+            purpose="login",
+        )
     except OTPCooldownError as exc:
-     raise HTTPException(
-        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail=str(exc),
-    ) 
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
     except OTPRateLimitError as exc:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(exc),
-        )from exc
+        ) from exc
 
     await session.commit()
 
     return {
-    "message": "OTP sent successfully",
-}
+        "message": "OTP sent successfully",
+    }
 
-#verify otp endpoint
+
+# Verify OTP endpoint
 @router.post("/verify-otp", status_code=status.HTTP_200_OK)
 async def verify_otp(
     request: VerifyOTPRequest,
@@ -95,16 +96,16 @@ async def verify_otp(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OTP",
-        )
+        ) from None
     except (
         OTPExpiredError,
         OTPAlreadyVerifiedError,
         OTPAttemptsExceededError,
     ):
-      raise HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OTP",
-        )
+        ) from None
 
     # Find existing user
     user_repository = UserRepository(session)
@@ -123,32 +124,47 @@ async def verify_otp(
     otp_record.user_id = user.id
     await otp_repository.update(otp_record)
 
-    # Create session
+    # Extract a valid client IP.
+    #
+    # Starlette TestClient uses "testclient" as the host during tests.
+    # PostgreSQL INET cannot store that value, so invalid/non-IP hosts
+    # are stored as NULL.
+    client_ip = None
+
+    if http_request.client is not None:
+        try:
+            ipaddress.ip_address(http_request.client.host)
+            client_ip = http_request.client.host
+        except ValueError:
+            client_ip = None
+
+    # Create authenticated session
     session_repository = UserSessionRepository(session)
     session_service = SessionService(session_repository)
 
     user_session, access_token, refresh_token = (
         await session_service.create_session(
-        user_id=user.id,
-        device_name=request.device_name,
-        device_type=request.device_type,
-        ip_address=http_request.client.host if http_request.client else None,
-        user_agent=http_request.headers.get("user-agent"),
-)
+            user_id=user.id,
+            device_name=request.device_name,
+            device_type=request.device_type,
+            ip_address=client_ip,
+            user_agent=http_request.headers.get("user-agent"),
+        )
     )
 
     await session.commit()
 
     return {
-    "message": "OTP verified successfully",
-    "access_token": access_token,
-    "refresh_token": refresh_token,
-    "token_type": "bearer",
-    "access_token_expires_at": user_session.access_token_expires_at,
-    "refresh_token_expires_at": user_session.refresh_token_expires_at,
-    "user_id": str(user.id),
-}
-    
+        "message": "OTP verified successfully",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "access_token_expires_at": user_session.access_token_expires_at,
+        "refresh_token_expires_at": user_session.refresh_token_expires_at,
+        "user_id": str(user.id),
+    }
+
+
 # Get current user endpoint
 @router.get("/me")
 async def get_me(
@@ -160,20 +176,20 @@ async def get_me(
         "status": current_user.status,
     }
 
+
 @router.post("/logout")
 async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_db_session),
 ):
     token = credentials.credentials
-
     token_hash = hash_token(token)
 
     session_repository = UserSessionRepository(session)
 
     user_session = await session_repository.get_by_access_token_hash(
-    token_hash
-)
+        token_hash
+    )
 
     if user_session is None:
         raise HTTPException(
@@ -188,6 +204,7 @@ async def logout(
     return {
         "message": "Logged out successfully",
     }
+
 
 @router.post("/refresh")
 async def refresh_token(
@@ -208,6 +225,7 @@ async def refresh_token(
             detail="Invalid refresh token",
         )
 
+    # Detect refresh-token reuse.
     if user_session.revoked_at is not None:
         if user_session.revocation_reason == "rotated":
             await session_repository.revoke_token_family(
@@ -227,6 +245,7 @@ async def refresh_token(
             detail="Session has been revoked",
         )
 
+    # Check refresh-token expiration.
     now = datetime.now(timezone.utc)
 
     if now >= user_session.refresh_token_expires_at:
@@ -235,6 +254,7 @@ async def refresh_token(
             detail="Refresh token has expired",
         )
 
+    # Rotate refresh/access tokens.
     session_service = SessionService(session_repository)
 
     (
