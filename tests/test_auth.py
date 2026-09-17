@@ -14,6 +14,7 @@ from app.repositories.user import UserRepository
 from app.services.session import hash_token
 from app.services.user import UserStatusService
 from unittest.mock import patch
+from app.repositories.user_session import UserSessionRepository
 
 
 client = TestClient(app)
@@ -818,3 +819,349 @@ def test_refresh_token_reuse_revokes_token_family() -> None:
 
     # Get the OTP from the database/test setup in the same way
     # your existing refresh-token tests do.
+
+def test_user_cannot_revoke_another_users_session(
+    monkeypatch,
+) -> None:
+    # Create User A and their session.
+    request_otp_for_test(
+        "9876543232",
+        monkeypatch,
+        "123456",
+    )
+
+    user_a_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": "9876543232",
+            "otp": "123456",
+        },
+    )
+
+    assert user_a_response.status_code == 200
+
+    user_a_access_token = user_a_response.json()["access_token"]
+
+    # Create User B and their session.
+    request_otp_for_test(
+        "9876543233",
+        monkeypatch,
+        "123456",
+    )
+
+    user_b_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": "9876543233",
+            "otp": "123456",
+        },
+    )
+
+    assert user_b_response.status_code == 200
+
+    user_b_access_token = user_b_response.json()["access_token"]
+
+    # Get User B's session ID.
+    sessions_response = client.get(
+        "/api/v1/auth/sessions",
+        headers={
+            "Authorization": f"Bearer {user_b_access_token}",
+        },
+    )
+
+    assert sessions_response.status_code == 200
+
+    user_b_sessions = sessions_response.json()
+
+    assert len(user_b_sessions) >= 1
+
+    user_b_session_id = user_b_sessions[0]["session_id"]
+
+    # User A attempts to revoke User B's session.
+    revoke_response = client.delete(
+        f"/api/v1/auth/sessions/{user_b_session_id}",
+        headers={
+            "Authorization": f"Bearer {user_a_access_token}",
+        },
+    )
+
+    # The API must not reveal that User B's session exists.
+    assert revoke_response.status_code == 404
+
+    # User B's session must still work.
+    user_b_me_response = client.get(
+        "/api/v1/auth/me",
+        headers={
+            "Authorization": f"Bearer {user_b_access_token}",
+        },
+    )
+
+    assert user_b_me_response.status_code == 200
+    assert user_b_me_response.json()["phone_number"] == "9876543233"
+
+
+def test_user_cannot_see_another_users_sessions(
+    monkeypatch,
+) -> None:
+    # Create User A and their session.
+    request_otp_for_test(
+        "9876543234",
+        monkeypatch,
+        "123456",
+    )
+
+    user_a_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": "9876543234",
+            "otp": "123456",
+        },
+    )
+
+    assert user_a_response.status_code == 200
+
+    user_a_access_token = user_a_response.json()["access_token"]
+
+    # Create User B and their session.
+    request_otp_for_test(
+        "9876543235",
+        monkeypatch,
+        "123456",
+    )
+
+    user_b_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": "9876543235",
+            "otp": "123456",
+        },
+    )
+
+    assert user_b_response.status_code == 200
+
+    user_b_access_token = user_b_response.json()["access_token"]
+
+    # Get User B's sessions.
+    user_b_sessions_response = client.get(
+        "/api/v1/auth/sessions",
+        headers={
+            "Authorization": f"Bearer {user_b_access_token}",
+        },
+    )
+
+    assert user_b_sessions_response.status_code == 200
+    user_b_sessions = user_b_sessions_response.json()
+    assert len(user_b_sessions) >= 1
+
+    user_b_session_id = user_b_sessions[0]["session_id"]
+
+    # User A can only see User A's sessions.
+    user_a_sessions_response = client.get(
+        "/api/v1/auth/sessions",
+        headers={
+            "Authorization": f"Bearer {user_a_access_token}",
+        },
+    )
+
+    assert user_a_sessions_response.status_code == 200
+
+    user_a_sessions = user_a_sessions_response.json()
+    user_a_session_ids = {
+        session["session_id"]
+        for session in user_a_sessions
+    }
+
+    assert user_b_session_id not in user_a_session_ids
+
+
+
+def test_revoked_refresh_token_cannot_be_used(
+    monkeypatch,
+) -> None:
+    phone_number = "9876543236"
+
+    request_otp_for_test(
+        phone_number,
+        monkeypatch,
+        "123456",
+    )
+
+    verify_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": "123456",
+        },
+    )
+
+    assert verify_response.status_code == 200
+
+    data = verify_response.json()
+    access_token = data["access_token"]
+    refresh_token = data["refresh_token"]
+
+    # Revoke the current session.
+    logout_response = client.post(
+        "/api/v1/auth/logout",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+        },
+    )
+
+    assert logout_response.status_code == 200
+
+    # The refresh token must now be rejected.
+    refresh_response = client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": refresh_token,
+        },
+    )
+
+    assert refresh_response.status_code == 401
+
+
+
+def test_revoking_one_session_does_not_revoke_other_sessions(
+    monkeypatch,
+) -> None:
+    phone_number = "9876543238"
+
+    # This test intentionally creates two sessions for the same user.
+    # OTP throttling/cooldown is tested separately.
+    monkeypatch.setattr(
+        otp_service.settings,
+        "otp_resend_cooldown_seconds",
+        0,
+    )
+
+    async def bypass_rate_limit(
+        self,
+        *,
+        phone_number: str,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(
+        otp_service.OTPService,
+        "check_request_rate_limit",
+        bypass_rate_limit,
+    )
+
+    # First device/session.
+    request_otp_for_test(
+        phone_number,
+        monkeypatch,
+        "123456",
+    )
+
+    first_verify = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": "123456",
+        },
+    )
+
+    assert first_verify.status_code == 200
+
+    first_data = first_verify.json()
+    first_access_token = first_data["access_token"]
+
+    # Second device/session.
+    request_otp_for_test(
+        phone_number,
+        monkeypatch,
+        "123456",
+    )
+
+    second_verify = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": "123456",
+        },
+    )
+
+    assert second_verify.status_code == 200
+
+    second_data = second_verify.json()
+    second_access_token = second_data["access_token"]
+
+    assert first_access_token != second_access_token
+
+    # The second session must be independently usable.
+    second_me_before = client.get(
+        "/api/v1/auth/me",
+        headers={
+            "Authorization": f"Bearer {second_access_token}",
+        },
+    )
+
+    assert second_me_before.status_code == 200
+
+    # List sessions.
+    sessions_response = client.get(
+        "/api/v1/auth/sessions",
+        headers={
+            "Authorization": f"Bearer {first_access_token}",
+        },
+    )
+
+    assert sessions_response.status_code == 200
+
+    sessions = sessions_response.json()
+
+    active_sessions = [
+        session
+        for session in sessions
+        if session["revoked_at"] is None
+    ]
+
+    assert len(active_sessions) >= 2
+
+    # Find the session belonging to the first access token.
+    async def get_first_session_id() -> str:
+        async for db_session in get_db_session():
+            repository = UserSessionRepository(db_session)
+
+            user_session = await repository.get_by_access_token_hash(
+                hash_token(first_access_token)
+            )
+
+            assert user_session is not None
+            return str(user_session.id)
+
+        raise AssertionError("Database session was not found")
+
+    first_session_id = asyncio.run(get_first_session_id())
+
+    # Revoke only the first session.
+    revoke_response = client.delete(
+        f"/api/v1/auth/sessions/{first_session_id}",
+        headers={
+            "Authorization": f"Bearer {first_access_token}",
+        },
+    )
+
+    assert revoke_response.status_code == 204
+
+    # First session is revoked.
+    first_me_after = client.get(
+        "/api/v1/auth/me",
+        headers={
+            "Authorization": f"Bearer {first_access_token}",
+        },
+    )
+
+    assert first_me_after.status_code == 401
+
+    # Second session must remain active.
+    second_me_after = client.get(
+        "/api/v1/auth/me",
+        headers={
+            "Authorization": f"Bearer {second_access_token}",
+        },
+    )
+
+    assert second_me_after.status_code == 200

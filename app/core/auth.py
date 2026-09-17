@@ -62,4 +62,8 @@ async def get_current_user(
             detail="User account is not active",
         )
 
+    # Update activity timestamp only after authentication succeeds.
+    user_session.last_used_at = datetime.now(timezone.utc)
+    await session.flush()
+
     return user

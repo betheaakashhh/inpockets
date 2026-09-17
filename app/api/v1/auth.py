@@ -1,4 +1,5 @@
 import ipaddress
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -13,8 +14,10 @@ from app.repositories.user import UserRepository
 from app.repositories.user_session import UserSessionRepository
 from app.schemas.auth import (
     RefreshTokenRequest,
+    SessionResponse,
     RequestOTPRequest,
     VerifyOTPRequest,
+    
 )
 from app.services.otp import (
     OTPAlreadyVerifiedError,
@@ -176,6 +179,38 @@ async def get_me(
         "status": current_user.status,
     }
 
+#session management endpoints
+@router.get(
+    "/sessions",
+    response_model=list[SessionResponse],
+)
+async def list_sessions(
+    current_user: User = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session),
+):
+    repository = UserSessionRepository(db_session)
+    session_service = SessionService(repository)
+
+    sessions = await session_service.get_user_sessions(
+        user_id=current_user.id,
+    )
+
+    return [
+        SessionResponse(
+            session_id=session.id,
+            device_name=session.device_name,
+            device_type=session.device_type,
+            ip_address=str(session.ip_address) if session.ip_address else None,
+            user_agent=session.user_agent,
+            created_at=session.created_at,
+            last_used_at=session.last_used_at,
+            access_token_expires_at=session.access_token_expires_at,
+            refresh_token_expires_at=session.refresh_token_expires_at,
+            revoked_at=session.revoked_at,
+            revocation_reason=session.revocation_reason,
+        )
+        for session in sessions
+    ]
 
 @router.post("/logout")
 async def logout(
@@ -274,3 +309,63 @@ async def refresh_token(
         "refresh_token_expires_at": user_session.refresh_token_expires_at,
         "user_id": str(user_session.user_id),
     }
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_session(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session),
+):
+    repository = UserSessionRepository(db_session)
+    session_service = SessionService(repository)
+
+    user_session = await session_service.revoke_user_session(
+        user_id=current_user.id,
+        session_id=session_id,
+    )
+
+    if user_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    await db_session.commit()
+
+@router.delete(
+    "/sessions/others",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_other_sessions(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_user: User = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session),
+):
+    access_token_hash = hash_token(credentials.credentials)
+
+    repository = UserSessionRepository(db_session)
+
+    current_session = (
+        await repository.get_by_user_id_and_access_token_hash(
+            user_id=current_user.id,
+            token_hash=access_token_hash,
+        )
+    )
+
+    if current_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
+
+    session_service = SessionService(repository)
+
+    await session_service.revoke_other_sessions(
+        user_id=current_user.id,
+        current_session_id=current_session.id,
+    )
+
+    await db_session.commit()

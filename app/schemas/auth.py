@@ -1,3 +1,5 @@
+from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 #request otp request schema
@@ -48,3 +50,16 @@ class VerifyOTPRequest(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., min_length=1)
+    
+class SessionResponse(BaseModel):
+    session_id: UUID
+    device_name: str | None = None
+    device_type: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+    last_used_at: datetime | None = None
+    access_token_expires_at: datetime
+    refresh_token_expires_at: datetime
+    revoked_at: datetime | None = None
+    revocation_reason: str | None = None

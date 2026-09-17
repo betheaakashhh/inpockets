@@ -14,7 +14,7 @@ class UserSessionRepository:
     async def create(
         self,
         *,
-        user_id,
+        user_id : uuid.UUID,
         token_family_id,
         access_token_hash: str,
         refresh_token_hash: str,
@@ -127,3 +127,39 @@ class UserSessionRepository:
                 user_session.revocation_reason = reason
 
         await self.session.flush()
+    
+    async def get_by_user_id(
+        self,
+        user_id: uuid.UUID,
+    ) -> list[UserSession]:
+        result = await self.session.execute(
+            select(UserSession)
+            .where(UserSession.user_id == user_id)
+            .order_by(UserSession.created_at.desc())
+        )
+        return list(result.scalars().all())
+    
+    async def get_by_id(
+    self,
+    session_id: uuid.UUID,
+) -> UserSession | None:
+     result = await self.session.execute(
+        select(UserSession).where(
+            UserSession.id == session_id,
+        )
+    )
+     return result.scalar_one_or_none()
+ 
+    async def get_by_user_id_and_access_token_hash(
+        self,
+        *,
+        user_id: uuid.UUID,
+        token_hash: str,
+    ) -> UserSession | None:
+        result = await self.session.execute(
+            select(UserSession).where(
+                UserSession.user_id == user_id,
+                UserSession.access_token_hash == token_hash,
+            )
+        )
+        return result.scalar_one_or_none()
