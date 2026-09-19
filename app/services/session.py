@@ -130,12 +130,16 @@ class SessionService:
         )
 
         new_session = await self.repository.create(
-            user_id=user_session.user_id,
-            token_family_id=user_session.token_family_id,
-            access_token_hash=access_token_hash,
-            refresh_token_hash=refresh_token_hash,
-            access_token_expires_at=access_token_expires_at,
-            refresh_token_expires_at=refresh_token_expires_at,
-        )
+         user_id=user_session.user_id,
+         token_family_id=user_session.token_family_id,
+         access_token_hash=access_token_hash,
+         refresh_token_hash=refresh_token_hash,
+         access_token_expires_at=access_token_expires_at,
+         refresh_token_expires_at=refresh_token_expires_at,
+         device_name=user_session.device_name,
+         device_type=user_session.device_type,
+         ip_address=user_session.ip_address,
+         user_agent=user_session.user_agent,
+)
 
         return new_session, access_token, refresh_token

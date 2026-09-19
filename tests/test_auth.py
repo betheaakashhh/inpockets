@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timedelta, timezone
 import asyncio
 
@@ -818,3 +819,216 @@ def test_refresh_token_reuse_revokes_token_family() -> None:
 
     # Get the OTP from the database/test setup in the same way
     # your existing refresh-token tests do.
+
+def test_get_sessions_returns_user_sessions(monkeypatch) -> None:
+    phone_number = "9876543232"
+    otp = "123456"
+
+    request_otp_for_test(phone_number, monkeypatch, otp)
+
+    verify_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": otp,
+        },
+    )
+
+    assert verify_response.status_code == 200
+
+    access_token = verify_response.json()["access_token"]
+
+    response = client.get(
+        "/api/v1/auth/sessions",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert "sessions" in data
+    assert len(data["sessions"]) == 1
+
+    session_data = data["sessions"][0]
+
+    assert "id" in session_data
+    assert session_data["device_name"] is None
+    assert session_data["device_type"] is None
+    assert "created_at" in session_data
+    assert "last_used_at" in session_data
+    assert "access_token" not in session_data
+    assert "refresh_token" not in session_data
+
+
+def test_revoke_session(monkeypatch) -> None:
+    phone_number = "9876543233"
+    otp = "123456"
+
+    request_otp_for_test(phone_number, monkeypatch, otp)
+
+    verify_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": otp,
+        },
+    )
+
+    assert verify_response.status_code == 200
+
+    access_token = verify_response.json()["access_token"]
+
+    sessions_response = client.get(
+        "/api/v1/auth/sessions",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert sessions_response.status_code == 200
+
+    session_id = sessions_response.json()["sessions"][0]["id"]
+
+    response = client.delete(
+        f"/api/v1/auth/sessions/{session_id}",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Session revoked successfully"
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert me_response.status_code == 401
+
+
+def test_revoke_other_sessions(monkeypatch) -> None:
+    phone_number = "9876543234"
+
+    monkeypatch.setattr(
+        otp_service.settings,
+        "otp_resend_cooldown_seconds",
+        0,
+    )
+
+    first_otp = "123456"
+
+    request_otp_for_test(
+        phone_number,
+        monkeypatch,
+        first_otp,
+    )
+
+    first_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": first_otp,
+        },
+    )
+
+    assert first_response.status_code == 200
+
+    first_access_token = first_response.json()["access_token"]
+
+    second_otp = "654321"
+
+    request_otp_for_test(
+        phone_number,
+        monkeypatch,
+        second_otp,
+    )
+
+    second_response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": second_otp,
+        },
+    )
+
+    assert second_response.status_code == 200
+
+    second_access_token = second_response.json()["access_token"]
+
+    response = client.delete(
+        "/api/v1/auth/sessions/others",
+        headers={"Authorization": f"Bearer {second_access_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["revoked_count"] == 1
+
+    current_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {second_access_token}"},
+    )
+
+    assert current_response.status_code == 200
+
+    previous_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {first_access_token}"},
+    )
+
+    assert previous_response.status_code == 401
+
+
+def test_revoke_session_not_owned_by_user(monkeypatch) -> None:
+    phone_number_1 = "9876543235"
+    phone_number_2 = "9876543236"
+
+    request_otp_for_test(
+        phone_number_1,
+        monkeypatch,
+        "123456",
+    )
+
+    response_1 = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number_1,
+            "otp": "123456",
+        },
+    )
+
+    assert response_1.status_code == 200
+
+    token_1 = response_1.json()["access_token"]
+
+    request_otp_for_test(
+        phone_number_2,
+        monkeypatch,
+        "654321",
+    )
+
+    response_2 = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number_2,
+            "otp": "654321",
+        },
+    )
+
+    assert response_2.status_code == 200
+
+    token_2 = response_2.json()["access_token"]
+
+    sessions_response = client.get(
+        "/api/v1/auth/sessions",
+        headers={"Authorization": f"Bearer {token_2}"},
+    )
+
+    assert sessions_response.status_code == 200
+
+    session_id = sessions_response.json()["sessions"][0]["id"]
+
+    response = client.delete(
+        f"/api/v1/auth/sessions/{session_id}",
+        headers={"Authorization": f"Bearer {token_1}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Session not found"

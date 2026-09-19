@@ -9,6 +9,7 @@ from app.models.user import User
 from app.repositories.user import UserRepository
 from app.repositories.user_session import UserSessionRepository
 from app.services.session import hash_token
+from app.models.user_session import UserSession
 
 security = HTTPBearer()
 
@@ -63,3 +64,58 @@ async def get_current_user(
         )
 
     return user
+
+async def get_current_user_session(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: AsyncSession = Depends(get_db_session),
+) -> tuple[User, UserSession]:
+    token = credentials.credentials
+    token_hash = hash_token(token)
+
+    session_repository = UserSessionRepository(session)
+
+    user_session = await session_repository.get_by_access_token_hash(
+        token_hash
+    )
+
+    if user_session is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    if user_session.revoked_at is not None:
+        raise HTTPException(
+            status_code=401,
+            detail="Session has been revoked",
+        )
+
+    if now >= user_session.access_token_expires_at:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token has expired",
+        )
+
+    user_repository = UserRepository(session)
+
+    user = await user_repository.get_by_id(user_session.user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found",
+        )
+
+    if user.status != "active":
+        raise HTTPException(
+            status_code=403,
+            detail="User account is not active",
+        )
+
+    user_session.last_used_at = datetime.now(timezone.utc)
+
+    await session.flush()
+
+    return user, user_session
