@@ -1,3 +1,6 @@
+import asyncio
+import selectors
+
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
@@ -11,6 +14,15 @@ from app.models.user_session import UserSession
 
 
 settings = get_settings()
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    class SelectorEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+        def new_event_loop(self):
+            return asyncio.SelectorEventLoop(selectors.SelectSelector())
+
+    return SelectorEventLoopPolicy()
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -33,9 +45,7 @@ async def clean_redis() -> None:
     try:
         keys = []
 
-        async for key in redis_client.scan_iter(
-            match="otp:request:*"
-        ):
+        async for key in redis_client.scan_iter(match="otp:request:*"):
             keys.append(key)
 
         if keys:

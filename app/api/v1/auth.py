@@ -1,12 +1,17 @@
 import ipaddress
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
+from app.core.auth import (
+    get_current_user, 
+    get_current_user_session,
+    )
 from app.db.session import get_db_session
+from app.models.user_session import UserSession
 from app.models.user import User
 from app.repositories.otp_verification import OTPVerificationRepository
 from app.repositories.user import UserRepository
@@ -206,6 +211,114 @@ async def logout(
     }
 
 
+@router.get("/sessions")
+async def get_sessions(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    session_repository = UserSessionRepository(session)
+
+    sessions = await session_repository.get_by_user_id(
+        current_user.id,
+    )
+
+    return {
+        "sessions": [
+            {
+                "id": str(user_session.id),
+                "device_name": user_session.device_name,
+                "device_type": user_session.device_type,
+                "ip_address": (
+                    str(user_session.ip_address)
+                    if user_session.ip_address is not None
+                    else None
+                ),
+                "user_agent": user_session.user_agent,
+                "created_at": user_session.created_at,
+                "last_used_at": user_session.last_used_at,
+                "revoked_at": user_session.revoked_at,
+            }
+            for user_session in sessions
+        ],
+    }
+
+@router.delete("/sessions/others")
+async def revoke_other_sessions(
+    current_user_and_session: tuple[User, UserSession] = Depends(
+        get_current_user_session
+    ),
+    session: AsyncSession = Depends(get_db_session),
+):
+    current_user, current_session = current_user_and_session
+
+    session_repository = UserSessionRepository(session)
+
+    sessions = await session_repository.get_by_user_id(
+        current_user.id,
+    )
+
+    revoked_count = 0
+
+    for user_session in sessions:
+        if (
+            user_session.id != current_session.id
+            and user_session.revoked_at is None
+        ):
+            await session_repository.revoke(
+                user_session,
+                reason="logout_other_sessions",
+            )
+            revoked_count += 1
+
+    await session.commit()
+
+    return {
+        "message": "Other sessions revoked successfully",
+        "revoked_count": revoked_count,
+    }
+    
+@router.delete("/sessions/{session_id}")
+async def revoke_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    session_repository = UserSessionRepository(session)
+
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        ) from None
+
+    user_session = await session_repository.get_by_id(
+        session_uuid,
+    )
+
+    if (
+        user_session is None
+        or user_session.user_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    await session_repository.revoke(
+        user_session,
+        reason="manual_revoke",
+    )
+
+    await session.commit()
+
+    return {
+        "message": "Session revoked successfully",
+    }
+
+
+    
 @router.post("/refresh")
 async def refresh_token(
     request: RefreshTokenRequest,

@@ -78,6 +78,31 @@ class UserSessionRepository:
         )
 
         return list(result.scalars().all())
+    
+    async def get_by_user_id(
+        self,
+        user_id,
+    ) -> list[UserSession]:
+        result = await self.session.execute(
+            select(UserSession)
+            .where(UserSession.user_id == user_id)
+            .order_by(UserSession.created_at.desc())
+        )
+
+        return list(result.scalars().all())
+
+
+    async def get_by_id(
+        self,
+        session_id: uuid.UUID,
+    ) -> UserSession | None:
+        result = await self.session.execute(
+            select(UserSession).where(
+                UserSession.id == session_id
+            )
+        )
+
+        return result.scalar_one_or_none()
 
     async def rotate_tokens(
         self,
