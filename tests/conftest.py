@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 from sqlalchemy import delete
-
+from uuid import uuid4
 from app.core.config import get_settings
 from app.db.session import get_db_session
 from app.models.otp_verification import OTPVerification
@@ -34,6 +34,11 @@ async def clean_database() -> None:
         await session.commit()
         break
 
+@pytest_asyncio.fixture
+async def db_session():
+    async for session in get_db_session():
+        yield session
+        break
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_redis() -> None:
@@ -52,3 +57,12 @@ async def clean_redis() -> None:
             await redis_client.delete(*keys)
     finally:
         await redis_client.aclose()
+
+@pytest_asyncio.fixture
+async def user(db_session):
+    user = User(
+        phone_number=f"+9199{uuid4().hex[:8]}",
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
