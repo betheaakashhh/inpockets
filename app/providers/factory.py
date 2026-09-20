@@ -22,3 +22,13 @@ def get_document_storage() -> DocumentStorage:
         return DevelopmentDocumentStorage()
 
     raise RuntimeError(f"Unsupported document storage provider: {provider}")
+
+from app.providers.identity_development import DevelopmentIdentityVerificationProvider
+from app.providers.identity_verification import IdentityVerificationProvider
+
+
+def get_identity_verification_provider() -> IdentityVerificationProvider:
+    provider = get_settings().identity_verification_provider.lower()
+    if provider == "development":
+        return DevelopmentIdentityVerificationProvider()
+    raise RuntimeError(f"Unsupported identity verification provider: {provider}")
