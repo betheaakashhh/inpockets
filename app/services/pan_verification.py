@@ -3,10 +3,10 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.domain.onboarding import OnboardingStep
 from app.domain.kyc import PANVerificationStatus
 from app.models.pan_verification import PANVerification
-from app.models.user_profile import UserProfile
 from app.repositories.onboarding import OnboardingRepository
 from app.repositories.onboarding_event import OnboardingEventRepository
 from app.repositories.pan_verification import PANVerificationRepository
@@ -25,12 +25,7 @@ class PANVerificationService:
         self.event_repository = OnboardingEventRepository(session)
         self.provider = get_pan_provider()
 
-    async def verify(
-        self,
-        *,
-        user_id: UUID,
-        pan_number: str,
-    ) -> PANVerification:
+    async def verify(self, *, user_id: UUID, pan_number: str) -> PANVerification:
         pan_number = pan_number.strip().upper()
 
         if not PAN_PATTERN.fullmatch(pan_number):
@@ -42,14 +37,14 @@ class PANVerificationService:
 
         if onboarding.current_step != OnboardingStep.PAN.value:
             raise ValueError(
-                f"PAN verification is not allowed at onboarding step "
-                f"{onboarding.current_step}"
+                f"PAN verification is not allowed at onboarding step {onboarding.current_step}"
             )
 
         latest = await self.pan_repository.get_latest_for_user(user_id=user_id)
-        if latest is not None and latest.status == PANVerificationStatus.VERIFIED.value:
-            return latest
-        if latest is not None and latest.status == PANVerificationStatus.PENDING.value:
+        if latest is not None and latest.status in {
+            PANVerificationStatus.VERIFIED.value,
+            PANVerificationStatus.PENDING.value,
+        }:
             return latest
 
         profile = await self.profile_repository.get_by_user_id(user_id)
@@ -58,11 +53,12 @@ class PANVerificationService:
 
         full_name = f"{profile.first_name} {profile.last_name}".strip()
         result = await self.provider.verify(pan_number, full_name)
+        provider_name = get_settings().pan_provider
 
         record = await self.pan_repository.create(
             user_id=user_id,
             pan_number_masked=f"{pan_number[:2]}******{pan_number[-2:]}",
-            provider=get_settings().pan_provider,
+            provider=provider_name,
             provider_ref=result.provider_ref,
             status=result.status,
             verified_name=result.verified_name,
