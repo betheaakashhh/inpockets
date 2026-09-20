@@ -24,7 +24,7 @@ def get_admin_customer_service(
 
 
 def _summary(row) -> AdminCustomerSummary:
-    user, profile, onboarding, pan_status, pan_number_masked = row
+    user, profile, onboarding, pan_status, pan_number_masked, kyc_status = row
     return AdminCustomerSummary(
         customer_id=user.id,
         phone_number=user.phone_number,
@@ -38,6 +38,7 @@ def _summary(row) -> AdminCustomerSummary:
         created_at=user.created_at,
         pan_status=pan_status,
         pan_number_masked=pan_number_masked,
+        kyc_status=kyc_status,
     )
 
 
@@ -77,7 +78,7 @@ async def get_customer(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
 
-    user, profile, onboarding, _pan_status, _pan_number_masked = row
+    user, profile, onboarding, _pan_status, _pan_number_masked, _kyc_status = row
     return AdminCustomerDetail(
         **_summary(row).model_dump(),
         profile_id=profile.id if profile else None,
