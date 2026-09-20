@@ -17,6 +17,7 @@ class AdminCustomerSummary(BaseModel):
     created_at: datetime
     pan_status: str | None = None
     pan_number_masked: str | None = None
+    kyc_status: str | None = None
 
 
 class AdminCustomerListResponse(BaseModel):
