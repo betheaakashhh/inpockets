@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PANVerificationRequest(BaseModel):
@@ -9,6 +9,7 @@ class PANVerificationRequest(BaseModel):
 
 
 class PANVerificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     status: str
     pan_number_masked: str
