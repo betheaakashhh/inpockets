@@ -5,6 +5,8 @@ from app.core.auth import get_current_user
 from app.db.session import get_db_session
 from app.models.user import User
 from app.schemas.kyc import KYCInitiationResponse, KYCStatusResponse
+from app.schemas.kyc_document import KYCDocumentListResponse, KYCDocumentResponse
+from app.services.kyc_document import KYCDocumentService
 from app.services.kyc import KYCService
 
 
@@ -44,3 +46,36 @@ async def get_kyc_status(
     await service.session.commit()
     await service.session.refresh(record)
     return KYCStatusResponse.model_validate(record)
+
+
+def get_kyc_document_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> KYCDocumentService:
+    return KYCDocumentService(session)
+
+
+@router.post("/kyc/documents", response_model=KYCDocumentListResponse)
+async def retrieve_kyc_documents(
+    current_user: User = Depends(get_current_user),
+    service: KYCDocumentService = Depends(get_kyc_document_service),
+) -> KYCDocumentListResponse:
+    try:
+        documents = await service.retrieve_documents(user_id=current_user.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except NotImplementedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="KYC document retrieval is unavailable for the configured provider",
+        ) from exc
+
+    await service.session.commit()
+    for document in documents:
+        await service.session.refresh(document)
+
+    return KYCDocumentListResponse(
+        items=[KYCDocumentResponse.model_validate(document) for document in documents]
+    )
