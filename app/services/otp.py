@@ -22,7 +22,7 @@ def generate_otp() -> str:
 
 def hash_otp(otp: str) -> str:
     return hmac.new(
-        settings.jwt_secret_key.encode(),
+        settings.otp_hash_secret.encode(),
         otp.encode(),
         hashlib.sha256,
     ).hexdigest()
@@ -66,13 +66,13 @@ class OTPService:
     def __init__(self, repository: OTPVerificationRepository):
         self.repository = repository
 
-    async def check_request_rate_limit(
+    async def _check_rate_limit(
         self,
         *,
-        phone_number: str,
+        key: str,
+        limit: int,
+        window_seconds: int,
     ) -> None:
-        key = f"otp:request:{phone_number}"
-
         redis_client = Redis.from_url(
             settings.redis_url,
             decode_responses=True,
@@ -82,16 +82,43 @@ class OTPService:
             count = await redis_client.incr(key)
 
             if count == 1:
-                await redis_client.expire(
-                    key,
-                    settings.otp_request_window_seconds,
-                )
+                await redis_client.expire(key, window_seconds)
         finally:
             await redis_client.aclose()
 
-        if count > settings.otp_request_limit:
+        if count > limit:
             raise OTPRateLimitError(
                 "Too many OTP requests. Please try again later."
+            )
+
+    async def check_request_rate_limit(
+        self,
+        *,
+        phone_number: str,
+    ) -> None:
+        await self._check_rate_limit(
+            key=f"otp:request:{phone_number}",
+            limit=settings.otp_request_limit,
+            window_seconds=settings.otp_request_window_seconds,
+        )
+
+    async def check_verify_rate_limit(
+        self,
+        *,
+        phone_number: str,
+        client_ip: str | None,
+    ) -> None:
+        await self._check_rate_limit(
+            key=f"otp:verify:phone:{phone_number}",
+            limit=settings.otp_verify_limit,
+            window_seconds=settings.otp_verify_window_seconds,
+        )
+
+        if client_ip is not None:
+            await self._check_rate_limit(
+                key=f"otp:verify:ip:{client_ip}",
+                limit=settings.otp_verify_limit * 3,
+                window_seconds=settings.otp_verify_window_seconds,
             )
 
     async def create_otp(
@@ -144,7 +171,6 @@ class OTPService:
             purpose=purpose,
         )
 
-        # Send OTP only after it has been successfully persisted.
         await sms_service.send_otp(
             phone_number=phone_number,
             otp=otp,
