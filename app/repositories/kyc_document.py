@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.kyc_document import KYCDocument
@@ -22,6 +22,19 @@ class KYCDocumentRepository:
                 KYCDocument.kyc_record_id == kyc_record_id,
                 KYCDocument.provider_document_ref == provider_document_ref,
             )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_provider_ref_for_update(
+        self, *, kyc_record_id: uuid.UUID, provider_document_ref: str
+    ) -> KYCDocument | None:
+        result = await self.session.execute(
+            select(KYCDocument)
+            .where(
+                KYCDocument.kyc_record_id == kyc_record_id,
+                KYCDocument.provider_document_ref == provider_document_ref,
+            )
+            .with_for_update()
         )
         return result.scalar_one_or_none()
 
