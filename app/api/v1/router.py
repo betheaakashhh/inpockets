@@ -5,6 +5,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.pan_verification import router as pan_verification_router
 from app.api.v1.kyc import router as kyc_router
+from app.api.v1.identity_verification import router as identity_verification_router
 from app.api.v1.admin_customers import router as admin_customers_router
 
 api_router = APIRouter()
@@ -37,6 +38,12 @@ api_router.include_router(
     kyc_router,
     prefix="/onboarding",
     tags=["KYC"],
+)
+
+api_router.include_router(
+    identity_verification_router,
+    prefix="/onboarding",
+    tags=["KYC - Identity Verification"],
 )
 
 api_router.include_router(
