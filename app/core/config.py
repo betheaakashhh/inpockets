@@ -13,9 +13,12 @@ class Settings(BaseSettings):
     redis_url: str
 
     jwt_secret_key: str
+    otp_hash_secret: str
     otp_resend_cooldown_seconds: int = 60
     otp_request_limit: int = 5
     otp_request_window_seconds: int = 3600
+    otp_verify_limit: int = 20
+    otp_verify_window_seconds: int = 900
     sms_provider: str = "development"
     pan_provider: str = "development"
     kyc_provider: str = "development"
