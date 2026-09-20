@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     kyc_provider: str = "development"
     document_storage_provider: str = "development"
     document_storage_path: str = ".data/documents"
+    identity_verification_provider: str = "development"
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
