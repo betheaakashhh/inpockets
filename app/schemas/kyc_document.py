@@ -1,10 +1,11 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class KYCDocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     kyc_record_id: UUID
     document_id: UUID
