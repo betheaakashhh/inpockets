@@ -15,6 +15,8 @@ class AdminCustomerSummary(BaseModel):
     onboarding_status: str | None
     onboarding_step: str | None
     created_at: datetime
+    pan_status: str | None = None
+    pan_number_masked: str | None = None
 
 
 class AdminCustomerListResponse(BaseModel):
