@@ -1032,3 +1032,42 @@ def test_revoke_session_not_owned_by_user(monkeypatch) -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Session not found"
+
+def test_verify_otp_endpoint_rate_limit(monkeypatch) -> None:
+    phone_number = "9876543237"
+    otp = "123456"
+
+    monkeypatch.setattr(
+        otp_service.settings,
+        "otp_verify_limit",
+        2,
+    )
+
+    request_otp_for_test(
+        phone_number,
+        monkeypatch,
+        otp,
+    )
+
+    for _ in range(2):
+        response = client.post(
+            "/api/v1/auth/verify-otp",
+            json={
+                "phone_number": phone_number,
+                "otp": "999999",
+            },
+        )
+        assert response.status_code == 400
+
+    response = client.post(
+        "/api/v1/auth/verify-otp",
+        json={
+            "phone_number": phone_number,
+            "otp": "999999",
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == (
+        "Too many OTP verification attempts. Please try again later."
+    )
