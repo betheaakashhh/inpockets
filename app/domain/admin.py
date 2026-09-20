@@ -1,0 +1,30 @@
+from enum import StrEnum
+
+
+class AdminRole(StrEnum):
+    SUPER_ADMIN = "SUPER_ADMIN"
+    SENIOR_UNDERWRITER = "SENIOR_UNDERWRITER"
+    UNDERWRITER = "UNDERWRITER"
+    KYC_REVIEWER = "KYC_REVIEWER"
+    FRAUD_REVIEWER = "FRAUD_REVIEWER"
+    COLLECTIONS_AGENT = "COLLECTIONS_AGENT"
+    CUSTOMER_SUPPORT = "CUSTOMER_SUPPORT"
+    FINANCE = "FINANCE"
+    AUDITOR = "AUDITOR"
+    READ_ONLY = "READ_ONLY"
+
+
+CUSTOMER_READ_ROLES = frozenset(
+    {
+        AdminRole.SUPER_ADMIN,
+        AdminRole.SENIOR_UNDERWRITER,
+        AdminRole.UNDERWRITER,
+        AdminRole.KYC_REVIEWER,
+        AdminRole.FRAUD_REVIEWER,
+        AdminRole.COLLECTIONS_AGENT,
+        AdminRole.CUSTOMER_SUPPORT,
+        AdminRole.FINANCE,
+        AdminRole.AUDITOR,
+        AdminRole.READ_ONLY,
+    }
+)

@@ -1,0 +1,27 @@
+from enum import StrEnum
+
+
+class KYCStatus(StrEnum):
+    NOT_STARTED = "NOT_STARTED"
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+
+
+class PANVerificationStatus(StrEnum):
+    PENDING = "PENDING"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+
+
+class IdentityVerificationStatus(StrEnum):
+    NOT_STARTED = "NOT_STARTED"
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    RETRY_REQUIRED = "RETRY_REQUIRED"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
