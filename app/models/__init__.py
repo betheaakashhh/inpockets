@@ -10,6 +10,8 @@ from app.models.pan_verification import PANVerification
 from app.models.kyc_record import KYCRecord
 from app.models.kyc_document import KYCDocument
 from app.models.identity_verification import IdentityVerification
+from app.models.admin_user import AdminUser
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -24,4 +26,6 @@ __all__ = [
     "KYCRecord",
     "KYCDocument",
     "IdentityVerification",
+    "AdminUser",
+    "AuditLog",
 ]
