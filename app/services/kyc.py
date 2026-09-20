@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,10 +78,15 @@ class KYCService:
             return None
 
         result = await self.provider.get_status(record.provider_ref)
-        record.status = result.status
+        try:
+            status = KYCStatus(result.status)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported KYC provider status: {result.status}") from exc
+        record.status = status.value
         record.failure_reason = result.failure_reason
 
-        if result.status == KYCStatus.VERIFIED.value:
+        if status == KYCStatus.VERIFIED:
+            record.completed_at = datetime.now(timezone.utc)
             onboarding = await self.onboarding_repository.get_by_user_id(user_id)
             if onboarding and onboarding.current_step == OnboardingStep.KYC.value:
                 onboarding.current_step = OnboardingStep.IDENTITY.value
