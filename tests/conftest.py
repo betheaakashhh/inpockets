@@ -10,6 +10,11 @@ from app.core.config import get_settings
 from app.db.session import get_db_session
 from app.models.otp_verification import OTPVerification
 from app.models.user import User
+from app.models.document import Document
+from app.models.kyc_document import KYCDocument
+from app.models.kyc_record import KYCRecord
+from app.models.pan_verification import PANVerification
+from app.models.identity_verification import IdentityVerification
 from app.models.user_session import UserSession
 
 
@@ -28,6 +33,11 @@ def event_loop_policy():
 @pytest_asyncio.fixture(autouse=True)
 async def clean_database() -> None:
     async for session in get_db_session():
+        await session.execute(delete(KYCDocument))
+        await session.execute(delete(PANVerification))
+        await session.execute(delete(IdentityVerification))
+        await session.execute(delete(KYCRecord))
+        await session.execute(delete(Document))
         await session.execute(delete(UserSession))
         await session.execute(delete(OTPVerification))
         await session.execute(delete(User))
