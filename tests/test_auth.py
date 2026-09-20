@@ -1,3 +1,4 @@
+import uuid
 import pytest
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -1034,7 +1035,7 @@ def test_revoke_session_not_owned_by_user(monkeypatch) -> None:
     assert response.json()["detail"] == "Session not found"
 
 def test_verify_otp_endpoint_rate_limit(monkeypatch) -> None:
-    phone_number = "9876543237"
+    phone_number = f"987{uuid.uuid4().int % 10_000_000:07d}"
     otp = "123456"
 
     monkeypatch.setattr(
