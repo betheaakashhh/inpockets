@@ -1,4 +1,29 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inpockets-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/inpockets
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:-change-me-otp-secret}
+      SMS_PROVIDER: ${SMS_PROVIDER:-development}
+      PAN_PROVIDER: ${PAN_PROVIDER:-development}
+      KYC_PROVIDER: ${KYC_PROVIDER:-development}
+      DOCUMENT_STORAGE_PROVIDER: ${DOCUMENT_STORAGE_PROVIDER:-development}
+      DOCUMENT_STORAGE_PATH: ${DOCUMENT_STORAGE_PATH:-.data/documents}
+      IDENTITY_VERIFICATION_PROVIDER: ${IDENTITY_VERIFICATION_PROVIDER:-development}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   postgres:
     image: postgres:17
     container_name: inpockets-postgres
