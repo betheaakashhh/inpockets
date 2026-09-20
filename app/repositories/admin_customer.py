@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.onboarding import OnboardingRecord
+from app.models.pan_verification import PANVerification
 from app.models.user import User
 from app.models.user_profile import UserProfile
 
@@ -14,9 +15,10 @@ class AdminCustomerRepository:
 
     async def list_customers(self, *, offset: int, limit: int):
         result = await self.session.execute(
-            select(User, UserProfile, OnboardingRecord)
+            select(User, UserProfile, OnboardingRecord, PANVerification)
             .outerjoin(UserProfile, UserProfile.user_id == User.id)
             .outerjoin(OnboardingRecord, OnboardingRecord.user_id == User.id)
+            .outerjoin(PANVerification, PANVerification.user_id == User.id)
             .order_by(User.created_at.desc())
             .offset(offset)
             .limit(limit)
@@ -34,6 +36,7 @@ class AdminCustomerRepository:
             select(User, UserProfile, OnboardingRecord)
             .outerjoin(UserProfile, UserProfile.user_id == User.id)
             .outerjoin(OnboardingRecord, OnboardingRecord.user_id == User.id)
+            .outerjoin(PANVerification, PANVerification.user_id == User.id)
             .where(User.id == user_id)
         )
         return result.one_or_none()
