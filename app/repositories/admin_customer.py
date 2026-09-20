@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.onboarding import OnboardingRecord
 from app.models.pan_verification import PANVerification
 from app.models.kyc_record import KYCRecord
+from app.models.identity_verification import IdentityVerification
 from app.models.user import User
 from app.models.user_profile import UserProfile
 
@@ -32,6 +33,15 @@ class AdminCustomerRepository:
             .scalar_subquery()
         )
 
+    def _identity_status_subquery(self):
+        return (
+            select(IdentityVerification.status)
+            .where(IdentityVerification.user_id == User.id)
+            .order_by(IdentityVerification.created_at.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+
     def _pan_masked_subquery(self):
         return (
             select(PANVerification.pan_number_masked)
@@ -50,6 +60,7 @@ class AdminCustomerRepository:
                 self._pan_status_subquery().label("pan_status"),
                 self._pan_masked_subquery().label("pan_number_masked"),
                 self._kyc_status_subquery().label("kyc_status"),
+                self._identity_status_subquery().label("identity_verification_status"),
             )
             .outerjoin(UserProfile, UserProfile.user_id == User.id)
             .outerjoin(OnboardingRecord, OnboardingRecord.user_id == User.id)
