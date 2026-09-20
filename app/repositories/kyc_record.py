@@ -31,6 +31,14 @@ class KYCRecordRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id_for_update(self, kyc_record_id: uuid.UUID) -> KYCRecord | None:
+        result = await self.session.execute(
+            select(KYCRecord)
+            .where(KYCRecord.id == kyc_record_id)
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def update(self, record: KYCRecord) -> KYCRecord:
         await self.session.flush()
         return record
