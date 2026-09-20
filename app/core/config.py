@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     sms_provider: str = "development"
     pan_provider: str = "development"
     kyc_provider: str = "development"
+    document_storage_provider: str = "development"
+    document_storage_path: str = ".data/documents"
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
