@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     otp_request_window_seconds: int = 3600
     sms_provider: str = "development"
     pan_provider: str = "development"
+    kyc_provider: str = "development"
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
