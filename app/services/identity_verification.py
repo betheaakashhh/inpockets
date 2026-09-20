@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.kyc import IdentityVerificationStatus
 from app.domain.onboarding import OnboardingStep
+from app.core.config import get_settings
 from app.providers.factory import get_identity_verification_provider
 from app.repositories.identity_verification import IdentityVerificationRepository
 from app.repositories.onboarding import OnboardingRepository
@@ -38,7 +39,7 @@ class IdentityVerificationService:
         session = await self.provider.start_session(str(user_id))
         record = await self.repository.create(
             user_id=user_id,
-            provider="development",
+            provider=get_settings().identity_verification_provider,
             provider_ref=session.provider_ref,
             verification_type="LIVENESS",
             status=IdentityVerificationStatus.PENDING.value,
