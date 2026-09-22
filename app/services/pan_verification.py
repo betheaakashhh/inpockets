@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import OnboardingNotStartedError, ValidationError
 from app.domain.onboarding import OnboardingStep
 from app.domain.kyc import PANVerificationStatus
 from app.models.pan_verification import PANVerification
@@ -29,14 +30,14 @@ class PANVerificationService:
         pan_number = pan_number.strip().upper()
 
         if not PAN_PATTERN.fullmatch(pan_number):
-            raise ValueError("Invalid PAN format")
+            raise ValidationError("Invalid PAN format")
 
         onboarding = await self.onboarding_repository.get_by_user_id(user_id)
         if onboarding is None:
-            raise ValueError("Onboarding has not started")
+            raise OnboardingNotStartedError()
 
         if onboarding.current_step != OnboardingStep.PAN.value:
-            raise ValueError(
+            raise ValidationError(
                 f"PAN verification is not allowed at onboarding step {onboarding.current_step}"
             )
 
@@ -49,7 +50,9 @@ class PANVerificationService:
 
         profile = await self.profile_repository.get_by_user_id(user_id)
         if profile is None or not profile.first_name or not profile.last_name:
-            raise ValueError("First name and last name are required before PAN verification")
+            raise ValidationError(
+                "First name and last name are required before PAN verification"
+            )
 
         full_name = f"{profile.first_name} {profile.last_name}".strip()
         result = await self.provider.verify(pan_number, full_name)
