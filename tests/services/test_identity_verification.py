@@ -7,6 +7,7 @@ from app.models.consent import Consent
 from app.models.kyc_record import KYCRecord
 from app.models.onboarding import OnboardingRecord
 from app.providers.identity_verification import IdentityVerificationResult
+from app.core.exceptions import ValidationError
 from app.services.identity_verification import IdentityVerificationService
 
 
@@ -112,5 +113,5 @@ async def test_identity_verification_rejects_wrong_onboarding_step(
 
     service = IdentityVerificationService(db_session)
 
-    with pytest.raises(ValueError, match="not allowed"):
+    with pytest.raises(ValidationError, match="not allowed"):
         await service.start(user_id=user.id)
