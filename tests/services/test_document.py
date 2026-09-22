@@ -4,6 +4,7 @@ import pytest
 
 from app.providers.storage import StoredDocumentContent
 from app.services.document import DocumentService
+from app.models.document import Document
 
 
 class FakeStorage:
@@ -83,6 +84,9 @@ class FakeRepository:
         return None
     async def delete(self, document):
        self.documents.pop(document.id, None)
+    
+    async def get_by_id_for_update(self, document_id):
+        return self.documents.get(document_id)
 
 
 @pytest.fixture
@@ -226,3 +230,31 @@ async def test_mutable_document_can_be_deleted(service):
     await service.delete_document(document.id)
 
     assert not await service.storage.exists(document.storage_ref)
+
+@pytest.mark.asyncio
+async def test_delete_document_uses_locked_lookup(service):
+    document = Document(
+        id=uuid.uuid4(),
+        document_type="IDENTITY_PROOF",
+        owner_type="USER",
+        owner_id=uuid.uuid4(),
+        storage_ref="documents/test.pdf",
+        checksum="a" * 64,
+        content_type="application/pdf",
+        size_bytes=100,
+        version=1,
+        is_immutable=False,
+    )
+
+    service.repository.documents[document.id] = document
+
+    deleted_storage_refs = []
+
+    async def delete_storage(storage_ref):
+        deleted_storage_refs.append(storage_ref)
+
+    service.storage.delete = delete_storage
+
+    await service.delete_document(document.id)
+
+    assert deleted_storage_refs == [document.storage_ref]

@@ -1,3 +1,4 @@
+from unittest import result
 import uuid
 
 from sqlalchemy import select
@@ -87,4 +88,15 @@ class DocumentRepository:
     async def delete(self, document: Document) -> None:
       await self.session.delete(document)
       await self.session.flush()
+      
+    async def get_by_id_for_update(
+    self,
+    document_id: uuid.UUID,
+) -> Document | None:
+        result = await self.session.execute(
+            select(Document)
+            .where(Document.id == document_id)
+            .with_for_update()
+    )
+        return result.scalar_one_or_none()
     

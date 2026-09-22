@@ -113,7 +113,7 @@ class DocumentService:
         return document
 
     async def get_document(self, document_id: UUID):
-        document = await self.repository.get_by_id(document_id)
+        document = await self.repository.get_by_id_for_update(document_id)
 
         if document is None:
             raise ValueError("Document not found")

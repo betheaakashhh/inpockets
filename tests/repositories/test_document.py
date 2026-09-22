@@ -250,3 +250,27 @@ async def test_list_documents_by_owner_respects_owner_type(
 
     assert len(documents) == 1
     assert documents[0].owner_type == "USER"
+
+@pytest.mark.asyncio
+async def test_get_by_id_for_update(db_session, user):
+    repository = DocumentRepository(db_session)
+
+    document = await repository.create(
+        document_type="IDENTITY_PROOF",
+        owner_type="USER",
+        owner_id=user.id,
+        storage_ref="documents/test-lock.pdf",
+        checksum="a" * 64,
+        content_type="application/pdf",
+        size_bytes=100,
+        version=1,
+        is_immutable=True,
+    )
+
+    await db_session.commit()
+
+    locked_document = await repository.get_by_id_for_update(document.id)
+
+    assert locked_document is not None
+    assert locked_document.id == document.id
+    assert locked_document.is_immutable is True
