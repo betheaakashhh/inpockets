@@ -2,6 +2,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import OnboardingNotStartedError, UnsupportedProviderError, ValidationError
 from app.domain.kyc import IdentityVerificationStatus
 from app.domain.onboarding import OnboardingStep
 from app.core.config import get_settings
@@ -22,9 +23,10 @@ class IdentityVerificationService:
     async def start(self, *, user_id: UUID):
         onboarding = await self.onboarding_repository.get_by_user_id(user_id)
         if onboarding is None:
-            raise ValueError("Onboarding has not started")
+            raise OnboardingNotStartedError()
+
         if onboarding.current_step != OnboardingStep.IDENTITY.value:
-            raise ValueError(
+            raise ValidationError(
                 f"Identity verification is not allowed at onboarding step {onboarding.current_step}"
             )
 
@@ -54,19 +56,23 @@ class IdentityVerificationService:
     async def submit_capture(self, *, user_id: UUID, capture_ref: str):
         record = await self.repository.get_latest_for_user(user_id=user_id)
         if record is None:
-            raise ValueError("Identity verification has not been started")
+            raise ValidationError("Identity verification has not been started")
 
         if record.status not in {
             IdentityVerificationStatus.PENDING.value,
             IdentityVerificationStatus.RETRY_REQUIRED.value,
             IdentityVerificationStatus.PROCESSING.value,
         }:
-            raise ValueError(
+            raise ValidationError(
                 f"Identity capture is not allowed while status is {record.status}"
             )
 
         result = await self.provider.submit_capture(record.provider_ref, capture_ref)
-        return await self._apply_result(user_id=user_id, record=record, result=result)
+        return await self._apply_result(
+            user_id=user_id,
+            record=record,
+            result=result,
+        )
 
     async def get_status(self, *, user_id: UUID):
         record = await self.repository.get_latest_for_user(user_id=user_id)
@@ -78,7 +84,7 @@ class IdentityVerificationService:
         try:
             status = IdentityVerificationStatus(result.status)
         except ValueError as exc:
-            raise ValueError(
+            raise UnsupportedProviderError(
                 f"Unsupported identity provider status: {result.status}"
             ) from exc
 
