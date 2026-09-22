@@ -4,24 +4,17 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import OnboardingNotStartedError, UnsupportedProviderError, ValidationError
 from app.domain.kyc import KYCStatus
 from app.domain.onboarding import OnboardingStep
-from app.providers.kyc import KYCProvider
-from app.providers.kyc_development import DevelopmentKYCProvider
 from app.repositories.consent import ConsentRepository
 from app.repositories.kyc_record import KYCRecordRepository
 from app.repositories.onboarding import OnboardingRepository
 from app.repositories.onboarding_event import OnboardingEventRepository
+from app.services.kyc import get_kyc_provider
 
 
 KYC_CONSENT_TYPE = "KYC"
-
-
-def get_kyc_provider() -> KYCProvider:
-    provider = get_settings().kyc_provider.lower()
-    if provider == "development":
-        return DevelopmentKYCProvider()
-    raise RuntimeError(f"Unsupported KYC provider: {provider}")
 
 
 class KYCService:
@@ -36,9 +29,10 @@ class KYCService:
     async def initiate(self, *, user_id: UUID):
         onboarding = await self.onboarding_repository.get_by_user_id(user_id)
         if onboarding is None:
-            raise ValueError("Onboarding has not started")
+            raise OnboardingNotStartedError()
+
         if onboarding.current_step != OnboardingStep.KYC.value:
-            raise ValueError(
+            raise ValidationError(
                 f"KYC initiation is not allowed at onboarding step {onboarding.current_step}"
             )
 
@@ -51,10 +45,11 @@ class KYCService:
             return existing, None
 
         consent = await self.consent_repository.get_by_user_and_type(
-            user_id, KYC_CONSENT_TYPE
+            user_id,
+            KYC_CONSENT_TYPE,
         )
         if consent is None or consent.status.upper() != "GRANTED":
-            raise ValueError("Active KYC consent is required")
+            raise ValidationError("Active KYC consent is required")
 
         result = await self.provider.initiate(str(user_id), str(consent.id))
         record = await self.kyc_repository.create(
@@ -81,7 +76,10 @@ class KYCService:
         try:
             status = KYCStatus(result.status)
         except ValueError as exc:
-            raise ValueError(f"Unsupported KYC provider status: {result.status}") from exc
+            raise UnsupportedProviderError(
+                f"Unsupported KYC provider status: {result.status}"
+            ) from exc
+
         record.status = status.value
         record.failure_reason = result.failure_reason
 
@@ -96,4 +94,5 @@ class KYCService:
                     event_type="KYC_VERIFIED",
                     event_metadata={"kyc_record_id": str(record.id)},
                 )
+
         return record
