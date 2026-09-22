@@ -8,6 +8,7 @@ import app.services.otp as otp_service
 from app.main import app
 from app.models.document import Document
 from app.repositories.document import DocumentRepository
+from app.providers.factory import get_document_storage
 
 
 client = TestClient(app)
@@ -70,6 +71,17 @@ async def create_document(
         size_bytes=1024,
         version=1,
         is_immutable=True,
+    )
+
+async def store_document_content(
+    content: bytes = b"%PDF-1.7\napi-test-document",
+):
+    storage = get_document_storage()
+
+    return await storage.put(
+        content=content,
+        content_type="application/pdf",
+        key_hint=f"api-test/{uuid4()}",
     )
 
 
@@ -227,3 +239,147 @@ async def test_list_documents_does_not_return_another_users_documents(
 
     assert response.status_code == 200
     assert response.json() == {"items": []}
+
+@pytest.mark.asyncio
+async def test_get_document_content_allows_owner(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(token),
+    )
+
+    assert me_response.status_code == 200
+
+    user_id = me_response.json()["id"]
+
+    content = b"%PDF-1.7\nowner-document-content"
+
+    stored = await store_document_content(content)
+
+    document = await create_document(
+        db_session,
+        user_id,
+        storage_ref=stored.storage_ref,
+        checksum=stored.checksum,
+    )
+
+    await db_session.commit()
+
+    response = client.get(
+        f"/api/v1/documents/{document.id}/content",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.content == content
+
+
+@pytest.mark.asyncio
+async def test_get_document_content_rejects_different_user(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    first_token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    first_me = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(first_token),
+    )
+
+    assert first_me.status_code == 200
+
+    first_user_id = first_me.json()["id"]
+
+    content = b"%PDF-1.7\nprivate-owner-document"
+
+    stored = await store_document_content(content)
+
+    document = await create_document(
+        db_session,
+        first_user_id,
+        storage_ref=stored.storage_ref,
+        checksum=stored.checksum,
+    )
+
+    await db_session.commit()
+
+    second_token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    response = client.get(
+        f"/api/v1/documents/{document.id}/content",
+        headers=auth_headers(second_token),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found"
+
+
+@pytest.mark.asyncio
+async def test_get_document_content_returns_404_for_nonexistent_document(
+    monkeypatch,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    response = client.get(
+        f"/api/v1/documents/{uuid4()}/content",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found"
+
+
+@pytest.mark.asyncio
+async def test_get_document_content_returns_404_when_storage_object_missing(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(token),
+    )
+
+    assert me_response.status_code == 200
+
+    user_id = me_response.json()["id"]
+
+    missing_storage_ref = f"documents/missing-{uuid4()}"
+
+    document = await create_document(
+        db_session,
+        user_id,
+        storage_ref=missing_storage_ref,
+    )
+
+    await db_session.commit()
+
+    response = client.get(
+        f"/api/v1/documents/{document.id}/content",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "Document content is missing from storage"
+    )
