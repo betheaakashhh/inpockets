@@ -1,3 +1,9 @@
+import httpx
+
+from app.core.exceptions import (
+    InvalidPhoneNumberError,
+    SMSProviderUnavailableError,
+)
 from app.providers.sms import SMSProvider
 
 
@@ -10,7 +16,12 @@ class SMSService:
         phone_number: str,
         otp: str,
     ) -> None:
-        await self.provider.send_otp(
-            phone_number=phone_number,
-            otp=otp,
-        )
+        try:
+            await self.provider.send_otp(
+                phone_number=phone_number,
+                otp=otp,
+            )
+        except ValueError as exc:
+            raise InvalidPhoneNumberError(str(exc)) from exc
+        except (RuntimeError, httpx.RequestError) as exc:
+            raise SMSProviderUnavailableError(str(exc)) from exc

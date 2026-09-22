@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
@@ -28,10 +28,7 @@ async def start_identity_verification(
     current_user: User = Depends(get_current_user),
     service: IdentityVerificationService = Depends(get_identity_verification_service),
 ) -> IdentityVerificationResponse:
-    try:
-        record, capture_session_token = await service.start(user_id=current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    record, capture_session_token = await service.start(user_id=current_user.id)
 
     await service.session.commit()
     await service.session.refresh(record)
@@ -51,16 +48,14 @@ async def submit_identity_capture(
     current_user: User = Depends(get_current_user),
     service: IdentityVerificationService = Depends(get_identity_verification_service),
 ) -> IdentityVerificationResponse:
-    try:
-        record = await service.submit_capture(
-            user_id=current_user.id,
-            capture_ref=payload.capture_ref,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    record = await service.submit_capture(
+        user_id=current_user.id,
+        capture_ref=payload.capture_ref,
+    )
 
     await service.session.commit()
     await service.session.refresh(record)
+
     return IdentityVerificationResponse.model_validate(record)
 
 

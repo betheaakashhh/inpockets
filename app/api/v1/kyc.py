@@ -22,13 +22,11 @@ async def initiate_kyc(
     current_user: User = Depends(get_current_user),
     service: KYCService = Depends(get_kyc_service),
 ) -> KYCInitiationResponse:
-    try:
-        record, consent_url = await service.initiate(user_id=current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    record, consent_url = await service.initiate(user_id=current_user.id)
 
     await service.session.commit()
     await service.session.refresh(record)
+
     return KYCInitiationResponse(
         **KYCStatusResponse.model_validate(record).model_dump(),
         consent_url=consent_url,
@@ -43,6 +41,7 @@ async def get_kyc_status(
     record = await service.refresh_status(user_id=current_user.id)
     if record is None:
         return None
+
     await service.session.commit()
     await service.session.refresh(record)
     return KYCStatusResponse.model_validate(record)
@@ -61,11 +60,6 @@ async def retrieve_kyc_documents(
 ) -> KYCDocumentListResponse:
     try:
         documents = await service.retrieve_documents(user_id=current_user.id)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
     except NotImplementedError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -77,5 +71,8 @@ async def retrieve_kyc_documents(
         await service.session.refresh(document)
 
     return KYCDocumentListResponse(
-        items=[KYCDocumentResponse.model_validate(document) for document in documents]
+        items=[
+            KYCDocumentResponse.model_validate(document)
+            for document in documents
+        ]
     )

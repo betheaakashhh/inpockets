@@ -269,7 +269,7 @@ def test_revoked_access_token_cannot_access_me(monkeypatch) -> None:
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Session has been revoked"
+    assert response.json()["error"]["message"] == "Session has been revoked"
 
 
 def test_expired_access_token_cannot_access_me(monkeypatch) -> None:
@@ -320,7 +320,7 @@ def test_expired_access_token_cannot_access_me(monkeypatch) -> None:
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Access token has expired"
+    assert response.json()["error"]["message"] == "Access token has expired"
 
 
 def test_old_refresh_token_cannot_be_reused_after_rotation(
@@ -418,7 +418,7 @@ def test_expired_refresh_token_cannot_be_used(monkeypatch) -> None:
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Refresh token has expired"
+    assert response.json()["error"]["message"] == "Refresh token has expired"
 
 
 def test_otp_attempt_limit(monkeypatch) -> None:
@@ -451,7 +451,7 @@ def test_otp_attempt_limit(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid or expired OTP"
+    assert response.json()["error"]["message"] == "Invalid or expired OTP"
 
 
 def test_expired_otp_cannot_be_used(monkeypatch) -> None:
@@ -495,7 +495,7 @@ def test_expired_otp_cannot_be_used(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid or expired OTP"
+    assert response.json()["error"]["message"] == "Invalid or expired OTP"
 
 
 def test_verified_otp_cannot_be_reused(monkeypatch) -> None:
@@ -526,7 +526,7 @@ def test_verified_otp_cannot_be_reused(monkeypatch) -> None:
     )
 
     assert second_verify_response.status_code == 400
-    assert second_verify_response.json()["detail"] == "Invalid or expired OTP"
+    assert second_verify_response.json()["error"]["message"] == "Invalid or expired OTP"
 
 
 def test_newest_otp_replaces_previous_otp(monkeypatch) -> None:
@@ -625,7 +625,7 @@ def test_inactive_user_cannot_access_me(monkeypatch) -> None:
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "User account is not active"
+    assert response.json()["error"]["message"] == "User account is not active"
 
 
 def test_user_status_can_be_changed(monkeypatch) -> None:
@@ -738,8 +738,8 @@ def test_request_otp_resend_is_rate_limited(monkeypatch) -> None:
 
     data = second_response.json()
 
-    assert "detail" in data
-    assert "OTP resend available in" in data["detail"]
+    assert "error" in data
+    assert "OTP resend available in" in data["error"]["message"]
 
 def test_request_otp_rate_limit(monkeypatch) -> None:
     phone_number = "9876500001"
@@ -762,7 +762,7 @@ def test_request_otp_rate_limit(monkeypatch) -> None:
     )
 
     assert response.status_code == 429
-    assert response.json()["detail"] == (
+    assert response.json()["error"]["message"] == (
         "Too many OTP requests. Please try again later."
     )
 def test_request_otp_sends_sms(
@@ -1032,7 +1032,7 @@ def test_revoke_session_not_owned_by_user(monkeypatch) -> None:
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Session not found"
+    assert response.json()["error"]["message"] == "Session not found"
 
 def test_verify_otp_endpoint_rate_limit(monkeypatch) -> None:
     phone_number = f"987{uuid.uuid4().int % 10_000_000:07d}"
@@ -1069,6 +1069,6 @@ def test_verify_otp_endpoint_rate_limit(monkeypatch) -> None:
     )
 
     assert response.status_code == 429
-    assert response.json()["detail"] == (
+    assert response.json()["error"]["message"] == (
         "Too many OTP verification attempts. Please try again later."
     )

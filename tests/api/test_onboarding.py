@@ -214,7 +214,7 @@ def test_update_onboarding_step_rejects_skipping(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
-    assert "Invalid onboarding step transition" in response.json()["detail"]
+    assert "Invalid onboarding step transition" in response.json()["error"]["message"]
 
 
 def test_update_onboarding_step_rejects_backward_transition(
@@ -244,7 +244,7 @@ def test_update_onboarding_step_rejects_backward_transition(
     )
 
     assert response.status_code == 400
-    assert "Invalid onboarding step transition" in response.json()["detail"]
+    assert "Invalid onboarding step transition" in response.json()["error"]["message"]
 
 
 def test_update_onboarding_step_rejects_invalid_step(
@@ -264,7 +264,7 @@ def test_update_onboarding_step_rejects_invalid_step(
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid onboarding step"
+    assert response.json()["error"]["message"] == "Invalid onboarding step"
 
 
 def test_complete_onboarding(monkeypatch) -> None:

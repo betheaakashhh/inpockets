@@ -4,6 +4,11 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import (
+    OnboardingNotStartedError,
+    UnsupportedProviderError,
+    ValidationError,
+)
 from app.domain.kyc import KYCStatus
 from app.domain.onboarding import OnboardingStep
 from app.providers.kyc import KYCProvider
@@ -19,9 +24,13 @@ KYC_CONSENT_TYPE = "KYC"
 
 def get_kyc_provider() -> KYCProvider:
     provider = get_settings().kyc_provider.lower()
+
     if provider == "development":
         return DevelopmentKYCProvider()
-    raise RuntimeError(f"Unsupported KYC provider: {provider}")
+
+    raise UnsupportedProviderError(
+        f"Unsupported KYC provider: {provider}"
+    )
 
 
 class KYCService:
@@ -35,14 +44,19 @@ class KYCService:
 
     async def initiate(self, *, user_id: UUID):
         onboarding = await self.onboarding_repository.get_by_user_id(user_id)
+
         if onboarding is None:
-            raise ValueError("Onboarding has not started")
+            raise OnboardingNotStartedError()
+
         if onboarding.current_step != OnboardingStep.KYC.value:
-            raise ValueError(
+            raise ValidationError(
                 f"KYC initiation is not allowed at onboarding step {onboarding.current_step}"
             )
 
-        existing = await self.kyc_repository.get_latest_for_user(user_id=user_id)
+        existing = await self.kyc_repository.get_latest_for_user(
+            user_id=user_id,
+        )
+
         if existing and existing.status in {
             KYCStatus.PENDING.value,
             KYCStatus.PROCESSING.value,
@@ -51,12 +65,18 @@ class KYCService:
             return existing, None
 
         consent = await self.consent_repository.get_by_user_and_type(
-            user_id, KYC_CONSENT_TYPE
+            user_id,
+            KYC_CONSENT_TYPE,
         )
-        if consent is None or consent.status.upper() != "GRANTED":
-            raise ValueError("Active KYC consent is required")
 
-        result = await self.provider.initiate(str(user_id), str(consent.id))
+        if consent is None or consent.status.upper() != "GRANTED":
+            raise ValidationError("Active KYC consent is required")
+
+        result = await self.provider.initiate(
+            str(user_id),
+            str(consent.id),
+        )
+
         record = await self.kyc_repository.create(
             user_id=user_id,
             consent_id=consent.id,
@@ -65,35 +85,53 @@ class KYCService:
             kyc_type="DIGILOCKER",
             status=KYCStatus.PENDING.value,
         )
+
         await self.event_repository.create(
             onboarding_id=onboarding.id,
             event_type="KYC_INITIATED",
             event_metadata={"kyc_record_id": str(record.id)},
         )
+
         return record, result.consent_url
 
     async def refresh_status(self, *, user_id: UUID):
-        record = await self.kyc_repository.get_latest_for_user(user_id=user_id)
+        record = await self.kyc_repository.get_latest_for_user(
+            user_id=user_id,
+        )
+
         if record is None:
             return None
 
         result = await self.provider.get_status(record.provider_ref)
+
         try:
             status = KYCStatus(result.status)
         except ValueError as exc:
-            raise ValueError(f"Unsupported KYC provider status: {result.status}") from exc
+            raise UnsupportedProviderError(
+                f"Unsupported KYC provider status: {result.status}"
+            ) from exc
+
         record.status = status.value
         record.failure_reason = result.failure_reason
 
         if status == KYCStatus.VERIFIED:
             record.completed_at = datetime.now(timezone.utc)
-            onboarding = await self.onboarding_repository.get_by_user_id(user_id)
-            if onboarding and onboarding.current_step == OnboardingStep.KYC.value:
+
+            onboarding = await self.onboarding_repository.get_by_user_id(
+                user_id,
+            )
+
+            if (
+                onboarding
+                and onboarding.current_step == OnboardingStep.KYC.value
+            ):
                 onboarding.current_step = OnboardingStep.IDENTITY.value
                 onboarding.status = "IN_PROGRESS"
+
                 await self.event_repository.create(
                     onboarding_id=onboarding.id,
                     event_type="KYC_VERIFIED",
                     event_metadata={"kyc_record_id": str(record.id)},
                 )
+
         return record

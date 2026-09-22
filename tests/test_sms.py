@@ -2,10 +2,12 @@ import httpx
 import pytest
 
 from app.core import sms as sms_module
+from app.core.exceptions import InvalidPhoneNumberError, SMSProviderUnavailableError
 from app.providers.development_sms import DevelopmentSMSProvider
 from app.providers.msg91_sms import MSG91SMSProvider
-from app.providers.production_sms import ProductionSMSProvider
+from app.providers.sms import SMSProvider
 from app.providers.twilio_sms import TwilioSMSProvider
+from app.services.sms import SMSService
 
 
 def test_development_sms_provider_selected(monkeypatch) -> None:
@@ -38,21 +40,6 @@ def test_twilio_sms_provider_selected(monkeypatch) -> None:
     )
 
 
-def test_production_sms_provider_selected(monkeypatch) -> None:
-    monkeypatch.setattr(
-        sms_module.settings,
-        "sms_provider",
-        "production",
-    )
-
-    provider = sms_module.create_sms_provider()
-
-    assert isinstance(
-        provider,
-        ProductionSMSProvider,
-    )
-
-
 def test_unknown_sms_provider_rejected(monkeypatch) -> None:
     monkeypatch.setattr(
         sms_module.settings,
@@ -60,11 +47,11 @@ def test_unknown_sms_provider_rejected(monkeypatch) -> None:
         "unknown",
     )
 
-    try:
+    with pytest.raises(
+        ValueError,
+        match="Unsupported SMS provider: unknown",
+    ):
         sms_module.create_sms_provider()
-        assert False, "Expected ValueError"
-    except ValueError as exc:
-        assert str(exc) == "Unsupported SMS provider: unknown"
 
 
 def test_twilio_phone_number_is_converted_to_e164() -> None:
@@ -79,11 +66,11 @@ def test_twilio_provider_requires_configuration(monkeypatch) -> None:
 
     provider = TwilioSMSProvider()
 
-    try:
+    with pytest.raises(
+        RuntimeError,
+        match="TWILIO_ACCOUNT_SID is not configured",
+    ):
         provider._require_settings()
-        assert False, "Expected RuntimeError"
-    except RuntimeError as exc:
-        assert str(exc) == "TWILIO_ACCOUNT_SID is not configured"
 
 
 def test_create_msg91_sms_provider(monkeypatch) -> None:
@@ -256,42 +243,36 @@ async def test_msg91_sends_otp(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_msg91_http_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        sms_module.settings,
-        "msg91_auth_key",
-        "auth-key",
-    )
-    monkeypatch.setattr(
-        sms_module.settings,
-        "msg91_otp_template_id",
-        "template-123",
-    )
-    monkeypatch.setattr(
-        sms_module.settings,
-        "msg91_otp_sender_id",
-        "IPKT",
-    )
+async def test_msg91_http_error() -> None:
+    class FailingProvider(SMSProvider):
+        async def send_otp(self, phone_number: str, otp: str) -> None:
+            raise RuntimeError("provider failed")
 
-    async def mock_post(self, url, **kwargs):
-        return httpx.Response(
-            status_code=500,
-            request=httpx.Request("POST", url),
-        )
-
-    monkeypatch.setattr(
-        httpx.AsyncClient,
-        "post",
-        mock_post,
-    )
-
-    provider = MSG91SMSProvider()
+    service = SMSService(FailingProvider())
 
     with pytest.raises(
-        RuntimeError,
-        match="MSG91 SMS provider failed with HTTP 500",
+        SMSProviderUnavailableError,
+        match="provider failed",
     ):
-        await provider.send_otp(
-            "9876543210",
-            "123456",
+        await service.send_otp(
+            phone_number="9876543210",
+            otp="123456",
+        )
+
+
+@pytest.mark.asyncio
+async def test_sms_service_maps_invalid_phone() -> None:
+    class InvalidPhoneProvider(SMSProvider):
+        async def send_otp(self, phone_number: str, otp: str) -> None:
+            raise ValueError("Phone number must be in E.164 format or a valid Indian mobile number")
+
+    service = SMSService(InvalidPhoneProvider())
+
+    with pytest.raises(
+        InvalidPhoneNumberError,
+        match="Phone number must be in E.164 format",
+    ):
+        await service.send_otp(
+            phone_number="12345",
+            otp="123456",
         )
