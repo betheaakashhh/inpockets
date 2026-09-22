@@ -18,6 +18,9 @@ class DevelopmentDocumentStorage(DocumentStorage):
     def _path_for(self, storage_ref: str) -> Path:
         return self._root() / storage_ref
 
+    def _metadata_path_for(self, storage_ref: str) -> Path:
+        return self._root() / f"{storage_ref}.meta"
+
     async def put(
         self,
         content: bytes,
@@ -31,10 +34,18 @@ class DevelopmentDocumentStorage(DocumentStorage):
 
         safe_hint = key_hint.replace("/", "_").replace("\\", "_")
         storage_ref = f"{safe_hint}-{checksum}"
+
         path = self._path_for(storage_ref)
+        metadata_path = self._metadata_path_for(storage_ref)
 
         if not path.exists():
             path.write_bytes(content)
+
+        if not metadata_path.exists():
+            metadata_path.write_text(
+                content_type,
+                encoding="utf-8",
+            )
 
         return StoredDocument(
             storage_ref=storage_ref,
@@ -47,15 +58,23 @@ class DevelopmentDocumentStorage(DocumentStorage):
         storage_ref: str,
     ) -> StoredDocumentContent:
         path = self._path_for(storage_ref)
+        metadata_path = self._metadata_path_for(storage_ref)
 
         if not path.exists():
             raise FileNotFoundError(
                 f"Document not found in development storage: {storage_ref}"
             )
 
+        if not metadata_path.exists():
+            raise FileNotFoundError(
+                f"Document metadata not found in development storage: {storage_ref}"
+            )
+
         return StoredDocumentContent(
             content=path.read_bytes(),
-            content_type="application/octet-stream",
+            content_type=metadata_path.read_text(
+                encoding="utf-8",
+            ),
         )
 
     async def exists(
@@ -69,6 +88,10 @@ class DevelopmentDocumentStorage(DocumentStorage):
         storage_ref: str,
     ) -> None:
         path = self._path_for(storage_ref)
+        metadata_path = self._metadata_path_for(storage_ref)
 
         if path.exists():
             path.unlink()
+
+        if metadata_path.exists():
+            metadata_path.unlink()
