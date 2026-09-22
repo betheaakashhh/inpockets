@@ -36,11 +36,13 @@ class DocumentRepository:
     async def get_by_checksum(
         self,
         *,
+        owner_type: str,
         owner_id: uuid.UUID,
         checksum: str,
     ) -> Document | None:
         result = await self.session.execute(
             select(Document).where(
+                Document.owner_type == owner_type,
                 Document.owner_id == owner_id,
                 Document.checksum == checksum,
             )

@@ -67,10 +67,16 @@ class FakeRepository:
                 return document
         return None
 
-    async def get_by_checksum(self, *, owner_id, checksum):
+    async def get_by_checksum(
+        self,
+        *,
+        owner_type,
+        owner_id, 
+        checksum):
         for document in self.documents.values():
             if (
-                document.owner_id == owner_id
+                document.owner_type == owner_type
+                and document.owner_id == owner_id
                 and document.checksum == checksum
             ):
                 return document

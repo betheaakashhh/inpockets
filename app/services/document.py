@@ -1,9 +1,11 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.providers.factory import get_document_storage
 from app.providers.storage import DocumentStorage
 from app.repositories.document import DocumentRepository
+
 
 
 class DocumentService:
@@ -38,6 +40,7 @@ class DocumentService:
         checksum = self._checksum(content)
 
         existing = await self.repository.get_by_checksum(
+            owner_type=owner_type,
             owner_id=owner_id,
             checksum=checksum,
         )
@@ -52,9 +55,9 @@ class DocumentService:
         )
 
         stored = await self.storage.put(
-        content=content,
-        content_type=content_type,
-        key_hint=storage_key,
+          content=content,
+          content_type=content_type,
+          key_hint=storage_key,
         )
 
         existing_storage = await self.repository.get_by_storage_ref(
@@ -62,19 +65,52 @@ class DocumentService:
         )
 
         if existing_storage is not None:
-            return existing_storage
+                if existing_storage.storage_ref != stored.storage_ref:
+                    await self.storage.delete(stored.storage_ref)
+                return existing_storage
 
-        return await self.repository.create(
-            document_type=document_type,
-            owner_type=owner_type,
-            owner_id=owner_id,
-            storage_ref=stored.storage_ref,
-            checksum=stored.checksum,
-            content_type=content_type,
-            size_bytes=stored.size_bytes,
-            version=1,
-            is_immutable=immutable,
-        )
+        try:
+            document = await self.repository.create(
+                document_type=document_type,
+                owner_type=owner_type,
+                owner_id=owner_id,
+                storage_ref=stored.storage_ref,
+                checksum=stored.checksum,
+                content_type=content_type,
+                size_bytes=stored.size_bytes,
+                version=1,
+                is_immutable=immutable,
+            )
+        except IntegrityError:
+            await self.session.rollback()
+
+            existing = await self.repository.get_by_checksum(
+                owner_type=owner_type,
+                owner_id=owner_id,
+                checksum=checksum,
+            )
+
+            if existing is not None:
+                if existing.storage_ref != stored.storage_ref:
+                    await self.storage.delete(stored.storage_ref)
+
+                return existing
+
+            existing_storage = await self.repository.get_by_storage_ref(
+                stored.storage_ref
+            )
+
+            if existing_storage is not None:
+                 if (
+                    existing_storage.owner_type == owner_type
+                    and existing_storage.owner_id == owner_id
+                    and existing_storage.checksum == checksum
+             ):
+                    return existing_storage
+
+            raise
+
+        return document
 
     async def get_document(self, document_id: UUID):
         document = await self.repository.get_by_id(document_id)

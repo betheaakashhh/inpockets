@@ -89,6 +89,7 @@ async def test_get_document_by_checksum_and_owner(
     )
 
     fetched = await repository.get_by_checksum(
+        owner_type="USER",
         owner_id=owner_id,
         checksum="c" * 64,
     )
@@ -119,6 +120,7 @@ async def test_get_document_by_checksum_does_not_cross_owners(
     )
 
     fetched = await repository.get_by_checksum(
+        owner_type="USER",
         owner_id=different_owner_id,
         checksum="d" * 64,
     )
