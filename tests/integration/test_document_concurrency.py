@@ -67,7 +67,7 @@ class FakeConcurrentStorage(DocumentStorage):
 @pytest.mark.asyncio
 async def test_concurrent_duplicate_document_creation():
     owner_id = uuid.uuid4()
-    content = b"same-concurrent-document"
+    content = b"%PDF-1.7\nsame-concurrent-document"
 
     storage = FakeConcurrentStorage()
 
@@ -120,7 +120,7 @@ async def test_concurrent_duplicate_document_creation():
 @pytest.mark.asyncio
 async def test_concurrent_duplicate_document_cleans_losing_storage():
     owner_id = uuid.uuid4()
-    content = b"same-concurrent-document-storage-race"
+    content = b"%PDF-1.7\nsame-concurrent-document-storage-race"
 
     storage = FakeConcurrentStorage()
     storage.unique_refs = True
