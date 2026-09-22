@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +12,18 @@ class Document(Base):
     """Metadata for a document whose bytes live in object storage."""
 
     __tablename__ = "documents"
+    __table_args__ = (
+    UniqueConstraint(
+        "owner_type",
+        "owner_id",
+        "checksum",
+        name="uq_documents_owner_checksum",
+    ),
+    UniqueConstraint(
+        "storage_ref",
+        name="uq_documents_storage_ref",
+    ),
+)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

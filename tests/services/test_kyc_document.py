@@ -1,8 +1,8 @@
 from uuid import uuid4
 
 import pytest
-
 import app.services.kyc_document as kyc_document_service
+from app.services import document as document_service
 from app.models.consent import Consent
 from app.models.kyc_record import KYCRecord
 from app.models.onboarding import OnboardingRecord
@@ -59,10 +59,11 @@ async def test_retrieve_kyc_documents_is_idempotent(db_session, user, monkeypatc
         "get_kyc_provider",
         lambda: provider,
     )
+
     monkeypatch.setattr(
-        kyc_document_service,
+        document_service,
         "get_document_storage",
-        lambda: storage,
+        lambda : storage,
     )
 
     onboarding = OnboardingRecord(

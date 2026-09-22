@@ -3,24 +3,22 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+
 from app.domain.kyc import KYCStatus
-from app.providers.factory import get_document_storage
 from app.providers.kyc import KYCProvider
-from app.repositories.document import DocumentRepository
 from app.repositories.kyc_document import KYCDocumentRepository
 from app.repositories.kyc_record import KYCRecordRepository
 from app.services.kyc import get_kyc_provider
+from app.services.document import DocumentService
 
 
 class KYCDocumentService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.provider: KYCProvider = get_kyc_provider()
-        self.storage = get_document_storage()
         self.kyc_repository = KYCRecordRepository(session)
         self.kyc_document_repository = KYCDocumentRepository(session)
-        self.document_repository = DocumentRepository(session)
+        self.document_service = DocumentService(session)
 
     async def retrieve_documents(self, *, user_id: UUID):
         record = await self.kyc_repository.get_latest_for_user(user_id=user_id)
@@ -56,27 +54,15 @@ class KYCDocumentService:
                     f"KYC provider returned an empty document: {provider_document_ref}"
                 )
 
-            storage = await self.storage.put(
-                content=content.content,
-                content_type=content.content_type,
-                key_hint=f"kyc-{record.id}-{content.provider_document_ref}",
-            )
-
-            document = await self.document_repository.get_by_storage_ref(
-                storage.storage_ref
-            )
-            if document is None:
-                document = await self.document_repository.create(
-                    document_type=content.document_type,
-                    owner_type="KYC_RECORD",
-                    owner_id=record.id,
-                    storage_ref=storage.storage_ref,
-                    checksum=storage.checksum,
-                    content_type=content.content_type,
-                    size_bytes=storage.size_bytes,
-                    version=1,
-                    is_immutable=True,
-                )
+            document = await self.document_service.store_document(
+              owner_type="KYC_RECORD",
+              owner_id=record.id,
+              document_type=content.document_type,
+              content=content.content,
+              content_type=content.content_type,
+              key_hint=f"kyc-{record.id}-{content.provider_document_ref}",
+              immutable=True,
+               )
 
             kyc_document = await self.kyc_document_repository.create(
                 kyc_record_id=record.id,
