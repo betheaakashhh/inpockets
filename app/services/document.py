@@ -1,5 +1,6 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from app.models.document import Document
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -140,6 +141,7 @@ class DocumentService:
                 document_type=document_type,
                 owner_type=owner_type,
                 owner_id=owner_id,
+                document_family_id=uuid4(),
                 storage_ref=stored.storage_ref,
                 checksum=stored.checksum,
                 content_type=content_type,
@@ -247,9 +249,92 @@ class DocumentService:
             owner_id=owner_id,
         )
 
+    async def create_document_version(
+        self,
+        *,
+        document_family_id: UUID,
+        content: bytes,
+        content_type: str,
+        immutable: bool = False,
+    ):
+        latest = await self.repository.get_latest_version_for_update(
+            document_family_id=document_family_id,
+        )
+
+        if latest is None:
+            raise ValueError("Document family not found")
+
+        if latest.is_immutable:
+            raise ValueError(
+                "Immutable documents cannot be replaced"
+            )
+
+        self._validate_document(
+            content=content,
+            content_type=content_type,
+        )
+
+        checksum = self._checksum(content)
+
+        existing = await self.repository.get_by_checksum(
+            owner_type=latest.owner_type,
+            owner_id=latest.owner_id,
+            checksum=checksum,
+        )
+
+        if existing is not None:
+            return existing
+
+        next_version = latest.version + 1
+
+        storage_key = (
+            f"{latest.owner_type.lower()}/"
+            f"{latest.owner_id}/"
+            f"{document_family_id}/"
+            f"v{next_version}/"
+            f"{checksum}"
+        )
+
+        stored = await self.storage.put(
+            content=content,
+            content_type=content_type,
+            key_hint=storage_key,
+        )
+
+        try:
+            document = await self.repository.create(
+                document_type=latest.document_type,
+                owner_type=latest.owner_type,
+                owner_id=latest.owner_id,
+                document_family_id=document_family_id,
+                storage_ref=stored.storage_ref,
+                checksum=stored.checksum,
+                content_type=content_type,
+                size_bytes=stored.size_bytes,
+                version=next_version,
+                is_immutable=immutable,
+            )
+        except IntegrityError:
+            await self.session.rollback()
+
+            if stored.storage_ref:
+                await self.storage.delete(stored.storage_ref)
+
+            raise
+
+        return document
+
+    async def list_versions(
+        self,
+        *,
+        document_family_id: UUID,
+    ) -> list[Document]:
+        return await self.repository.list_versions(
+            document_family_id=document_family_id,
+        )
+
     @staticmethod
     def _checksum(content: bytes) -> str:
         import hashlib
 
         return hashlib.sha256(content).hexdigest()
-

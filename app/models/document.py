@@ -23,6 +23,11 @@ class Document(Base):
         "storage_ref",
         name="uq_documents_storage_ref",
     ),
+    UniqueConstraint(
+        "document_family_id",
+        "version",
+        name="uq_documents_family_version",
+    ),
 )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -39,6 +44,11 @@ class Document(Base):
         UUID(as_uuid=True),
         nullable=False,
         index=True,
+    )
+    document_family_id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True),
+    nullable=False,
+    index=True,
     )
 
     storage_ref: Mapped[str] = mapped_column(String(500), nullable=False)

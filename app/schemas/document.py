@@ -3,7 +3,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -16,7 +15,12 @@ class DocumentResponse(BaseModel):
     version: int
     is_immutable: bool
     created_at: datetime
+    document_family_id: UUID
 
 
 class DocumentListResponse(BaseModel):
+    items: list[DocumentResponse]
+
+class DocumentVersionListResponse(BaseModel):
+    document_family_id: UUID
     items: list[DocumentResponse]

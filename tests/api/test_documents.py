@@ -58,6 +58,7 @@ async def create_document(
     document_type: str = "IDENTITY_PROOF",
     storage_ref: str | None = None,
     checksum: str | None = None,
+    is_immutable: bool = True,
 ) -> Document:
     repository = DocumentRepository(db_session)
 
@@ -65,12 +66,13 @@ async def create_document(
         document_type=document_type,
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref=storage_ref or f"documents/{uuid4()}",
         checksum=checksum or uuid4().hex + "0" * 32,
         content_type="application/pdf",
         size_bytes=1024,
         version=1,
-        is_immutable=True,
+        is_immutable=is_immutable,
     )
 
 async def store_document_content(
@@ -185,6 +187,7 @@ async def test_list_documents_does_not_expose_storage_details(
         document_type="KYC_DOCUMENT",
         storage_ref="private/storage/ref",
         checksum="a" * 64,
+
     )
     await db_session.commit()
 
@@ -383,3 +386,370 @@ async def test_get_document_content_returns_404_when_storage_object_missing(
     assert response.json()["detail"] == (
         "Document content is missing from storage"
     )
+
+@pytest.mark.asyncio
+async def test_list_document_versions_requires_authentication() -> None:
+    response = client.get(
+        f"/api/v1/documents/family/{uuid4()}/versions"
+    )
+
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_list_document_versions_returns_customer_versions(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(token),
+    )
+
+    assert me_response.status_code == 200
+
+    user_id = me_response.json()["id"]
+
+    family_id = uuid4()
+
+    repository = DocumentRepository(db_session)
+
+    v1 = await repository.create(
+        document_type="IDENTITY_PROOF",
+        owner_type="USER",
+        owner_id=user_id,
+        document_family_id=family_id,
+        storage_ref=f"documents/{uuid4()}",
+        checksum="a" * 64,
+        content_type="application/pdf",
+        size_bytes=100,
+        version=1,
+        is_immutable=False,
+    )
+
+    v2 = await repository.create(
+        document_type="IDENTITY_PROOF",
+        owner_type="USER",
+        owner_id=user_id,
+        document_family_id=family_id,
+        storage_ref=f"documents/{uuid4()}",
+        checksum="b" * 64,
+        content_type="application/pdf",
+        size_bytes=200,
+        version=2,
+        is_immutable=False,
+    )
+
+    await db_session.commit()
+
+    response = client.get(
+        f"/api/v1/documents/family/{family_id}/versions",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["document_family_id"] == str(family_id)
+    assert len(data["items"]) == 2
+
+    assert data["items"][0]["id"] == str(v1.id)
+    assert data["items"][0]["version"] == 1
+
+    assert data["items"][1]["id"] == str(v2.id)
+    assert data["items"][1]["version"] == 2
+
+@pytest.mark.asyncio
+async def test_list_document_versions_rejects_different_user(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    first_token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    first_me = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(first_token),
+    )
+
+    assert first_me.status_code == 200
+
+    first_user_id = first_me.json()["id"]
+
+    document = await create_document(
+        db_session,
+        first_user_id,
+        document_type="PRIVATE_DOCUMENT",
+    )
+
+    await db_session.commit()
+
+    second_token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    response = client.get(
+        f"/api/v1/documents/family/{document.document_family_id}/versions",
+        headers=auth_headers(second_token),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document family not found"
+
+@pytest.mark.asyncio
+async def test_list_document_versions_returns_404_for_nonexistent_family(
+    monkeypatch,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    response = client.get(
+        f"/api/v1/documents/family/{uuid4()}/versions",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document family not found"
+
+@pytest.mark.asyncio
+async def test_list_document_versions_does_not_expose_storage_details(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(token),
+    )
+
+    assert me_response.status_code == 200
+
+    user_id = me_response.json()["id"]
+
+    document = await create_document(
+        db_session,
+        user_id,
+        document_type="KYC_DOCUMENT",
+        storage_ref="private/storage/ref",
+        checksum="c" * 64,
+    )
+
+    await db_session.commit()
+
+    response = client.get(
+        f"/api/v1/documents/family/{document.document_family_id}/versions",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+
+    item = response.json()["items"][0]
+
+    assert "storage_ref" not in item
+    assert "checksum" not in item
+
+@pytest.mark.asyncio
+async def test_create_document_version_requires_authentication() -> None:
+    response = client.post(
+        f"/api/v1/documents/family/{uuid4()}/versions",
+        files={
+            "file": (
+                "document.pdf",
+                b"%PDF-1.7\nunauthorized",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_create_document_version_creates_v2(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(token),
+    )
+
+    assert me_response.status_code == 200
+
+    user_id = me_response.json()["id"]
+
+    v1 = await create_document(
+    db_session,
+    user_id,
+    document_type="IDENTITY_PROOF",
+    storage_ref=f"documents/{uuid4()}",
+    checksum="a" * 64,
+    is_immutable=False,
+)
+
+    await db_session.commit()
+
+    response = client.post(
+        f"/api/v1/documents/family/{v1.document_family_id}/versions",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "identity-proof.pdf",
+                b"%PDF-1.7\nupdated-identity-proof",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 201, response.json()
+
+    data = response.json()
+
+    assert data["document_family_id"] == str(v1.document_family_id)
+    assert data["version"] == 2
+    assert data["document_type"] == "IDENTITY_PROOF"
+    assert data["owner_id"] == str(user_id)
+    assert data["content_type"] == "application/pdf"
+    assert data["id"] != str(v1.id)
+
+@pytest.mark.asyncio
+async def test_create_document_version_rejects_different_user(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    first_token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    first_me = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(first_token),
+    )
+
+    assert first_me.status_code == 200
+
+    first_user_id = first_me.json()["id"]
+
+    document = await create_document(
+        db_session,
+        first_user_id,
+        document_type="PRIVATE_DOCUMENT",
+    )
+
+    await db_session.commit()
+
+    second_token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    response = client.post(
+        f"/api/v1/documents/family/{document.document_family_id}/versions",
+        headers=auth_headers(second_token),
+        files={
+            "file": (
+                "private.pdf",
+                b"%PDF-1.7\nunauthorized-update",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document family not found"
+
+@pytest.mark.asyncio
+async def test_create_document_version_returns_404_for_missing_family(
+    monkeypatch,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    response = client.post(
+        f"/api/v1/documents/family/{uuid4()}/versions",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "missing.pdf",
+                b"%PDF-1.7\nmissing-family",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document family not found"
+
+@pytest.mark.asyncio
+async def test_create_document_version_returns_existing_for_duplicate_content(
+    monkeypatch,
+    db_session: AsyncSession,
+) -> None:
+    token = authenticate_test_user(
+        monkeypatch,
+        phone_number=f"987{uuid4().int % 10_000_000:07d}",
+    )
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=auth_headers(token),
+    )
+
+    assert me_response.status_code == 200
+
+    user_id = me_response.json()["id"]
+
+    content = b"%PDF-1.7\nsame-document"
+
+    stored = await store_document_content(content)
+
+    document = await create_document(
+    db_session,
+    user_id,
+    document_type="IDENTITY_PROOF",
+    storage_ref=stored.storage_ref,
+    checksum=stored.checksum,
+    is_immutable=False,
+)
+
+    await db_session.commit()
+
+    response = client.post(
+        f"/api/v1/documents/family/{document.document_family_id}/versions",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "identity-proof.pdf",
+                content,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["id"] == str(document.id)
+    assert data["version"] == 1

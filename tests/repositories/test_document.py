@@ -19,6 +19,7 @@ async def test_create_and_get_document(
         document_type="IDENTITY_PROOF",
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/test-document",
         checksum="a" * 64,
         content_type="application/pdf",
@@ -48,21 +49,23 @@ async def test_get_document_by_storage_ref(
     db_session: AsyncSession,
 ):
     repository = DocumentRepository(db_session)
+    owner_id = uuid4()
 
     document = await repository.create(
-        document_type="KYC_DOCUMENT",
-        owner_type="KYC_RECORD",
-        owner_id=uuid4(),
-        storage_ref="kyc/document-123",
-        checksum="b" * 64,
-        content_type="image/jpeg",
-        size_bytes=2048,
+        document_type="IDENTITY_PROOF",
+        owner_type="USER",
+        owner_id=owner_id,
+        document_family_id=uuid4(),
+        storage_ref="documents/test-document",
+        checksum="a" * 64,
+        content_type="application/pdf",
+        size_bytes=1024,
         version=1,
         is_immutable=True,
     )
 
     fetched = await repository.get_by_storage_ref(
-        "kyc/document-123",
+        "documents/test-document",
     )
 
     assert fetched is not None
@@ -79,6 +82,7 @@ async def test_get_document_by_checksum_and_owner(
     document = await repository.create(
         document_type="ADDRESS_PROOF",
         owner_type="USER",
+        document_family_id=uuid4(),
         owner_id=owner_id,
         storage_ref="documents/address-proof",
         checksum="c" * 64,
@@ -111,6 +115,7 @@ async def test_get_document_by_checksum_does_not_cross_owners(
         document_type="IDENTITY_PROOF",
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/owner-one",
         checksum="d" * 64,
         content_type="application/pdf",
@@ -139,6 +144,7 @@ async def test_list_documents_by_owner(
         document_type="PAN",
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/pan",
         checksum="e" * 64,
         content_type="application/pdf",
@@ -151,6 +157,7 @@ async def test_list_documents_by_owner(
         document_type="ADDRESS_PROOF",
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/address",
         checksum="f" * 64,
         content_type="application/pdf",
@@ -182,6 +189,7 @@ async def test_list_documents_by_owner_and_type(
         document_type="IDENTITY_PROOF",
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/identity-1",
         checksum="1" * 64,
         content_type="application/pdf",
@@ -194,6 +202,7 @@ async def test_list_documents_by_owner_and_type(
         document_type="ADDRESS_PROOF",
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/address-1",
         checksum="2" * 64,
         content_type="application/pdf",
@@ -223,6 +232,7 @@ async def test_list_documents_by_owner_respects_owner_type(
         document_type="IDENTITY_PROOF",
         owner_type="USER",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/user-identity",
         checksum="3" * 64,
         content_type="application/pdf",
@@ -235,6 +245,7 @@ async def test_list_documents_by_owner_respects_owner_type(
         document_type="IDENTITY_PROOF",
         owner_type="KYC_RECORD",
         owner_id=owner_id,
+        document_family_id=uuid4(),
         storage_ref="documents/kyc-identity",
         checksum="4" * 64,
         content_type="application/pdf",
@@ -259,6 +270,7 @@ async def test_get_by_id_for_update(db_session, user):
         document_type="IDENTITY_PROOF",
         owner_type="USER",
         owner_id=user.id,
+        document_family_id=uuid4(),
         storage_ref="documents/test-lock.pdf",
         checksum="a" * 64,
         content_type="application/pdf",

@@ -1,4 +1,5 @@
 import uuid
+from uuid import uuid4
 
 import pytest
 
@@ -575,3 +576,271 @@ async def test_list_documents_only_returns_documents_for_owner(
     assert documents[0].id == owner_document.id
     assert documents[0].owner_id == owner_id
     assert documents[0].id != other_document.id
+@pytest.mark.asyncio
+async def test_create_document_version_returns_existing_document_for_duplicate_content(
+    db_session: AsyncSession,
+):
+    service = DocumentService(db_session)
+
+    owner_id = uuid4()
+
+    content = b"%PDF-1.7\nduplicate-document"
+
+    first_document = await service.store_document(
+        owner_type="USER",
+        owner_id=owner_id,
+        document_type="IDENTITY_PROOF",
+        content=content,
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    result = await service.create_document_version(
+        document_family_id=first_document.document_family_id,
+        content=content,
+        content_type="application/pdf",
+        immutable=False,
+    )
+
+    assert result.id == first_document.id
+    assert result.document_family_id == first_document.document_family_id
+    assert result.version == 1
+    assert result.checksum == first_document.checksum
+
+@pytest.mark.asyncio
+async def test_create_document_version_allows_same_content_for_different_owner(
+    db_session: AsyncSession,
+):
+    service = DocumentService(db_session)
+
+    first_owner_id = uuid4()
+    second_owner_id = uuid4()
+
+    content = b"%PDF-1.7\nsame-content-different-owner"
+
+    first_document = await service.store_document(
+        owner_type="USER",
+        owner_id=first_owner_id,
+        document_type="IDENTITY_PROOF",
+        content=content,
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    second_document = await service.store_document(
+        owner_type="USER",
+        owner_id=second_owner_id,
+        document_type="IDENTITY_PROOF",
+        content=content,
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    assert first_document.id != second_document.id
+    assert first_document.document_family_id != second_document.document_family_id
+    assert first_document.version == 1
+    assert second_document.version == 1
+    assert first_document.checksum == second_document.checksum
+
+@pytest.mark.asyncio
+async def test_create_document_version_creates_v2(
+    db_session: AsyncSession,
+):
+    service = DocumentService(db_session)
+
+    owner_id = uuid4()
+
+    v1_content = b"%PDF-1.7\noriginal-document"
+    v2_content = b"%PDF-1.7\nupdated-document"
+
+    v1 = await service.store_document(
+        owner_type="USER",
+        owner_id=owner_id,
+        document_type="IDENTITY_PROOF",
+        content=v1_content,
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    v2 = await service.create_document_version(
+        document_family_id=v1.document_family_id,
+        content=v2_content,
+        content_type="application/pdf",
+        immutable=False,
+    )
+
+    assert v2.id != v1.id
+    assert v2.document_family_id == v1.document_family_id
+    assert v2.version == 2
+    assert v2.owner_id == v1.owner_id
+    assert v2.owner_type == v1.owner_type
+    assert v2.document_type == v1.document_type
+    assert v2.checksum != v1.checksum
+    assert v2.storage_ref != v1.storage_ref
+
+@pytest.mark.asyncio
+async def test_create_document_version_creates_v3(
+    db_session: AsyncSession,
+):
+    service = DocumentService(db_session)
+
+    owner_id = uuid4()
+
+    v1_content = b"%PDF-1.7\nversion-one"
+    v2_content = b"%PDF-1.7\nversion-two"
+    v3_content = b"%PDF-1.7\nversion-three"
+
+    v1 = await service.store_document(
+        owner_type="USER",
+        owner_id=owner_id,
+        document_type="IDENTITY_PROOF",
+        content=v1_content,
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    v2 = await service.create_document_version(
+        document_family_id=v1.document_family_id,
+        content=v2_content,
+        content_type="application/pdf",
+        immutable=False,
+    )
+
+    v3 = await service.create_document_version(
+        document_family_id=v1.document_family_id,
+        content=v3_content,
+        content_type="application/pdf",
+        immutable=False,
+    )
+
+    assert v2.version == 2
+    assert v3.version == 3
+
+    assert v3.document_family_id == v1.document_family_id
+    assert v3.id != v2.id
+    assert v3.checksum != v2.checksum
+    assert v3.storage_ref != v2.storage_ref
+
+@pytest.mark.asyncio
+async def test_create_document_version_preserves_previous_versions(
+    db_session: AsyncSession,
+):
+    service = DocumentService(db_session)
+
+    owner_id = uuid4()
+
+    v1_content = b"%PDF-1.7\nversion-one"
+    v2_content = b"%PDF-1.7\nversion-two"
+
+    v1 = await service.store_document(
+        owner_type="USER",
+        owner_id=owner_id,
+        document_type="IDENTITY_PROOF",
+        content=v1_content,
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    original_v1_id = v1.id
+    original_v1_checksum = v1.checksum
+    original_v1_storage_ref = v1.storage_ref
+
+    v2 = await service.create_document_version(
+        document_family_id=v1.document_family_id,
+        content=v2_content,
+        content_type="application/pdf",
+        immutable=False,
+    )
+
+    assert v2.version == 2
+
+    versions = await service.list_versions(
+        document_family_id=v1.document_family_id,
+    )
+
+    assert len(versions) == 2
+
+    stored_v1 = next(
+        document for document in versions
+        if document.version == 1
+    )
+
+    stored_v2 = next(
+        document for document in versions
+        if document.version == 2
+    )
+
+    assert stored_v1.id == original_v1_id
+    assert stored_v1.checksum == original_v1_checksum
+    assert stored_v1.storage_ref == original_v1_storage_ref
+
+    assert stored_v2.id == v2.id
+    assert stored_v2.checksum == v2.checksum
+    assert stored_v2.storage_ref == v2.storage_ref
+
+@pytest.mark.asyncio
+async def test_create_document_version_isolated_between_families(
+    db_session: AsyncSession,
+):
+    service = DocumentService(db_session)
+
+    first_owner_id = uuid4()
+    second_owner_id = uuid4()
+
+    first_document = await service.store_document(
+        owner_type="USER",
+        owner_id=first_owner_id,
+        document_type="IDENTITY_PROOF",
+        content=b"%PDF-1.7\nfamily-one-v1",
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    second_document = await service.store_document(
+        owner_type="USER",
+        owner_id=second_owner_id,
+        document_type="IDENTITY_PROOF",
+        content=b"%PDF-1.7\nfamily-two-v1",
+        content_type="application/pdf",
+        key_hint="identity-proof",
+        immutable=False,
+    )
+
+    first_v2 = await service.create_document_version(
+        document_family_id=first_document.document_family_id,
+        content=b"%PDF-1.7\nfamily-one-v2",
+        content_type="application/pdf",
+        immutable=False,
+    )
+
+    assert first_v2.version == 2
+    assert first_v2.document_family_id == first_document.document_family_id
+
+    second_versions = await service.list_versions(
+        document_family_id=second_document.document_family_id,
+    )
+
+    assert len(second_versions) == 1
+    assert second_versions[0].version == 1
+    assert second_versions[0].id == second_document.id
+
+@pytest.mark.asyncio
+async def test_create_document_version_missing_family(
+    db_session: AsyncSession,
+):
+    service = DocumentService(db_session)
+
+    with pytest.raises(ValueError, match="Document family not found"):
+        await service.create_document_version(
+            document_family_id=uuid4(),
+            content=b"%PDF-1.7\nmissing-family",
+            content_type="application/pdf",
+            immutable=False,
+        )
