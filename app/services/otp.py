@@ -14,7 +14,6 @@ from app.repositories.otp_verification import OTPVerificationRepository
 
 logger = logging.getLogger(__name__)
 
-
 OTP_LENGTH = 6
 OTP_EXPIRY_MINUTES = 5
 MAX_OTP_ATTEMPTS = 5
@@ -103,9 +102,6 @@ return 1
 _RATE_LIMIT_COMMIT_SCRIPT = """
 if redis.call('HGET', KEYS[1], ARGV[1]) then
     redis.call('HDEL', KEYS[1], ARGV[1])
-    if redis.call('HLEN', KEYS[1]) == 1 then
-        redis.call('DEL', KEYS[1])
-    end
     return 1
 end
 return 0
@@ -283,6 +279,7 @@ class OTPService:
             limit=settings.otp_request_limit,
             window_seconds=settings.otp_request_window_seconds,
         )
+        reservation_active = True
 
         try:
             latest_otp = await self.repository.get_latest(
@@ -304,7 +301,6 @@ class OTPService:
                     remaining_seconds = int(
                         (cooldown_until - now).total_seconds()
                     )
-
                     raise OTPCooldownError(
                         f"OTP resend available in {remaining_seconds + 1} seconds"
                     )
@@ -335,6 +331,7 @@ class OTPService:
                     reservation_token=reservation_token,
                     redis_client=redis_client,
                 )
+                reservation_active = False
                 raise OTPSMSDeliveryError(
                     "OTP could not be sent. Please try again later."
                 ) from exc
@@ -344,15 +341,17 @@ class OTPService:
                 reservation_token=reservation_token,
                 redis_client=redis_client,
             )
+            reservation_active = False
 
             return record, otp
         except Exception:
-            if 'redis_client' in locals() and not redis_client.closed:
+            if reservation_active:
                 await self._release_rate_limit(
                     key=rate_limit_key,
                     reservation_token=reservation_token,
                     redis_client=redis_client,
                 )
+                reservation_active = False
             raise
 
     async def verify_otp(
