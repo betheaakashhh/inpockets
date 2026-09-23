@@ -67,6 +67,19 @@ class UserSessionRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_by_refresh_token_hash_for_update(
+        self,
+        token_hash: str,
+    ) -> UserSession | None:
+        """Load a refresh-token session while holding a database row lock."""
+        result = await self.session.execute(
+            select(UserSession)
+            .where(UserSession.refresh_token_hash == token_hash)
+            .with_for_update()
+        )
+
+        return result.scalar_one_or_none()
+
     async def get_by_token_family_id(
         self,
         token_family_id: uuid.UUID,
@@ -78,7 +91,7 @@ class UserSessionRepository:
         )
 
         return list(result.scalars().all())
-    
+
     async def get_by_user_id(
         self,
         user_id,
@@ -90,7 +103,6 @@ class UserSessionRepository:
         )
 
         return list(result.scalars().all())
-
 
     async def get_by_id(
         self,
