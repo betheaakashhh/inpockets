@@ -1,11 +1,9 @@
 import asyncio
+import logging
 import sys
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-import logging
-
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -22,15 +20,14 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-
-
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Backend API for the InPockets digital lending platform.",
 )
-#middleware 
+
 app.add_middleware(RequestIDMiddleware)
+
 
 @app.exception_handler(AppException)
 async def app_exception_handler(
@@ -54,6 +51,32 @@ async def app_exception_handler(
             "error": {
                 "code": exc.code,
                 "message": exc.message,
+                "request_id": request_id,
+            }
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+
+    logger.exception(
+        "Unhandled exception: path=%s, request_id=%s",
+        request.url.path,
+        request_id,
+        exc_info=exc,
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred.",
                 "request_id": request_id,
             }
         },
