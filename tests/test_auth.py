@@ -1072,3 +1072,78 @@ def test_verify_otp_endpoint_rate_limit(monkeypatch) -> None:
     assert response.json()["detail"] == (
         "Too many OTP verification attempts. Please try again later."
     )
+
+
+
+def test_failed_sms_delivery_does_not_consume_request_rate_limit(monkeypatch) -> None:
+    phone_number = f"987{uuid.uuid4().int % 10_000_000:07d}"
+    monkeypatch.setattr(
+        otp_service.settings,
+        "otp_resend_cooldown_seconds",
+        0,
+    )
+
+    async def failing_send_otp(*, phone_number: str, otp: str) -> None:
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(
+        otp_service.sms_service,
+        "send_otp",
+        failing_send_otp,
+    )
+
+    failed_response = client.post(
+        "/api/v1/auth/request-otp",
+        json={"phone_number": phone_number},
+    )
+
+    assert failed_response.status_code == 502
+    assert failed_response.json()["detail"] == (
+        "OTP could not be sent. Please try again later."
+    )
+
+    async def successful_send_otp(*, phone_number: str, otp: str) -> None:
+        return None
+
+    monkeypatch.setattr(
+        otp_service.sms_service,
+        "send_otp",
+        successful_send_otp,
+    )
+
+    retry_response = client.post(
+        "/api/v1/auth/request-otp",
+        json={"phone_number": phone_number},
+    )
+
+    assert retry_response.status_code == 200
+
+
+def test_unexpected_exception_returns_safe_500(monkeypatch) -> None:
+    phone_number = f"987{uuid.uuid4().int % 10_000_000:07d}"
+
+    async def raise_unexpected_error(*args, **kwargs):
+        raise RuntimeError("unexpected test failure")
+
+    monkeypatch.setattr(
+        otp_service.OTPService,
+        "create_otp",
+        raise_unexpected_error,
+    )
+
+    safe_client = TestClient(
+        app,
+        raise_server_exceptions=False,
+    )
+
+    response = safe_client.post(
+        "/api/v1/auth/request-otp",
+        json={"phone_number": phone_number},
+    )
+
+    assert response.status_code == 500
+    data = response.json()
+
+    assert data["error"]["code"] == "INTERNAL_SERVER_ERROR"
+    assert data["error"]["message"] == "An unexpected error occurred."
+    assert data["error"]["request_id"]

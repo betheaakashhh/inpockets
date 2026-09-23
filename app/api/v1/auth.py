@@ -11,8 +11,8 @@ from app.core.auth import (
     get_current_user_session,
 )
 from app.db.session import get_db_session
-from app.models.user_session import UserSession
 from app.models.user import User
+from app.models.user_session import UserSession
 from app.repositories.otp_verification import OTPVerificationRepository
 from app.repositories.user import UserRepository
 from app.repositories.user_session import UserSessionRepository
@@ -28,7 +28,9 @@ from app.services.otp import (
     OTPInvalidError,
     OTPRateLimitError,
     OTPService,
+    OTPServiceUnavailableError,
     OTPCooldownError,
+    OTPSMSDeliveryError,
 )
 from app.services.session import SessionService, hash_token
 
@@ -71,6 +73,16 @@ async def request_otp(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(exc),
         ) from exc
+    except OTPServiceUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except OTPSMSDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
 
     await session.commit()
 
@@ -97,6 +109,11 @@ async def verify_otp(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many OTP verification attempts. Please try again later.",
+        ) from exc
+    except OTPServiceUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
         ) from exc
 
     otp_record = await otp_repository.get_latest(
@@ -332,7 +349,8 @@ async def refresh_token(
 
     refresh_token_hash = hash_token(request.refresh_token)
 
-    user_session = await session_repository.get_by_refresh_token_hash(
+    # Serialize refresh-token rotation at the database row level.
+    user_session = await session_repository.get_by_refresh_token_hash_for_update(
         refresh_token_hash
     )
 
