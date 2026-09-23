@@ -40,6 +40,11 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+    document_max_size_bytes: int = 10 * 1024 * 1024
+
+    document_allowed_content_types: str = (
+    "application/pdf,image/jpeg,image/png"
+    )
 
 
 @lru_cache

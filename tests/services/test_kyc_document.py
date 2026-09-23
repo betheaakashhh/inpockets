@@ -1,8 +1,8 @@
 from uuid import uuid4
 
 import pytest
-
 import app.services.kyc_document as kyc_document_service
+from app.services import document as document_service
 from app.models.consent import Consent
 from app.models.kyc_record import KYCRecord
 from app.models.onboarding import OnboardingRecord
@@ -26,11 +26,9 @@ class FakeKYCProvider:
         return KYCDocumentContent(
             provider_document_ref=provider_document_ref,
             document_type="AADHAAR_XML",
-            content=b"verified-document",
-            content_type="application/octet-stream",
-        )
-
-
+            content=b"%PDF-1.7\nverified-document",
+            content_type="application/pdf",
+            )
 class FakeStorage:
     def __init__(self):
         self.put_count = 0
@@ -59,10 +57,11 @@ async def test_retrieve_kyc_documents_is_idempotent(db_session, user, monkeypatc
         "get_kyc_provider",
         lambda: provider,
     )
+
     monkeypatch.setattr(
-        kyc_document_service,
+        document_service,
         "get_document_storage",
-        lambda: storage,
+        lambda : storage,
     )
 
     onboarding = OnboardingRecord(
@@ -100,8 +99,6 @@ async def test_retrieve_kyc_documents_is_idempotent(db_session, user, monkeypatc
     assert first[0].id == second[0].id
     assert provider.fetch_count == 1
     assert storage.put_count == 1
-
-
 @pytest.mark.asyncio
 async def test_retrieve_kyc_documents_requires_verified_kyc(db_session, user):
     onboarding = OnboardingRecord(
