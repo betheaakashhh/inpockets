@@ -16,6 +16,7 @@ from app.models.kyc_record import KYCRecord
 from app.models.pan_verification import PANVerification
 from app.models.identity_verification import IdentityVerification
 from app.models.user_session import UserSession
+from app.models.admin_user import AdminUser
 
 
 settings = get_settings()
@@ -40,6 +41,7 @@ async def clean_database() -> None:
         await session.execute(delete(Document))
         await session.execute(delete(UserSession))
         await session.execute(delete(OTPVerification))
+        await session.execute(delete(AdminUser))
         await session.execute(delete(User))
         await session.commit()
         break
@@ -71,8 +73,19 @@ async def clean_redis() -> None:
 @pytest_asyncio.fixture
 async def user(db_session):
     user = User(
-        phone_number=f"+9199{uuid4().hex[:8]}",
+        phone_number=f"9{uuid4().int % 1_000_000_000:09d}",
     )
     db_session.add(user)
     await db_session.flush()
     return user
+
+@pytest_asyncio.fixture
+async def admin_user(db_session, user):
+    admin = AdminUser(
+        user_id=user.id,
+        role="UNDERWRITER",
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    return admin

@@ -8,6 +8,10 @@ from app.api.v1.kyc import router as kyc_router
 from app.api.v1.identity_verification import router as identity_verification_router
 from app.api.v1.admin_customers import router as admin_customers_router
 from app.api.v1.documents import router as documents_router
+from app.api.v1.loan_application import router as loan_application_router
+from app.api.v1.admin_loan_application import (
+    router as admin_loan_application_router,
+)
 
 api_router = APIRouter()
 
@@ -57,4 +61,14 @@ api_router.include_router(
     documents_router,
     prefix="/documents",
     tags=["Documents"],
+)
+api_router.include_router(
+    loan_application_router,
+    prefix="/loan-applications",
+    tags=["Loan Applications"],
+)
+api_router.include_router(
+    admin_loan_application_router,
+    prefix="/admin/loan-applications",
+    tags=["Admin Loan Applications"],
 )
