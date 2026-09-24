@@ -12,6 +12,7 @@ from app.models.kyc_document import KYCDocument
 from app.models.identity_verification import IdentityVerification
 from app.models.admin_user import AdminUser
 from app.models.audit_log import AuditLog
+from app.models.loan_application import LoanApplication, LoanApplicationEvent
 
 __all__ = [
     "User",
@@ -28,4 +29,6 @@ __all__ = [
     "IdentityVerification",
     "AdminUser",
     "AuditLog",
+    "LoanApplication",
+    "LoanApplicationEvent",
 ]
