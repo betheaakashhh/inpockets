@@ -94,6 +94,13 @@ class LoanApplication(Base):
     cascade="all, delete-orphan",
     order_by="FraudAssessment.created_at.asc()",
     )
+
+    risk_assessments: Mapped[list["RiskAssessment"]] = relationship(
+        "RiskAssessment",
+        back_populates="loan_application",
+        cascade="all, delete-orphan",
+        order_by="RiskAssessment.created_at.asc()",
+    )
     
     __table_args__ = (
         Index("ix_loan_applications_user_id", "user_id"),
