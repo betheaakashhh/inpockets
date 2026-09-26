@@ -88,6 +88,7 @@ class RiskAssessment(Base):
 
     loan_application = relationship(
         "LoanApplication",
+        back_populates="risk_assessments",
     )
 
     user = relationship(
