@@ -80,3 +80,30 @@ def test_assessment_context_is_versioned_and_reproducible():
     assert context == same_context
     assert context.context_version == "assessment-context-v1"
     assert context.requested_at == requested_at
+
+
+def test_assessment_context_rejects_invalid_application_inputs():
+    common = {
+        "user_id": uuid4(),
+        "loan_application_id": uuid4(),
+    }
+
+    try:
+        AssessmentContext(
+            **common,
+            requested_amount=Decimal("0"),
+            requested_tenure_days=30,
+        )
+        assert False
+    except ValueError as exc:
+        assert str(exc) == "requested_amount must be greater than zero"
+
+    try:
+        AssessmentContext(
+            **common,
+            requested_amount=Decimal("10000.00"),
+            requested_tenure_days=0,
+        )
+        assert False
+    except ValueError as exc:
+        assert str(exc) == "requested_tenure_days must be greater than zero"
