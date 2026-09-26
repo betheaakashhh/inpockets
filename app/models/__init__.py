@@ -13,6 +13,10 @@ from app.models.identity_verification import IdentityVerification
 from app.models.admin_user import AdminUser
 from app.models.audit_log import AuditLog
 from app.models.loan_application import LoanApplication, LoanApplicationEvent
+from app.models.credit_assessment import CreditAssessment
+from app.models.fraud_assessment import FraudAssessment
+from app.models.affordability_assessment import AffordabilityAssessment
+from app.models.risk_assessment import RiskAssessment
 
 __all__ = [
     "User",
@@ -31,4 +35,8 @@ __all__ = [
     "AuditLog",
     "LoanApplication",
     "LoanApplicationEvent",
+    "CreditAssessment",
+    "FraudAssessment",
+    "AffordabilityAssessment",
+    "RiskAssessment",
 ]

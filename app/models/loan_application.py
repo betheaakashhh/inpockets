@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
+
 from sqlalchemy import ( #type: ignore
     DateTime,
     ForeignKey,
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship #type: ignore
 
 from app.db.base import Base
 from app.domain.loan_application import LoanApplicationStatus
+
 
 
 class LoanApplication(Base):
@@ -76,8 +78,23 @@ class LoanApplication(Base):
         back_populates="application",
         cascade="all, delete-orphan",
         order_by="LoanApplicationEvent.created_at",
+        
     )
 
+    credit_assessments: Mapped[list["CreditAssessment"]] = relationship(
+    "CreditAssessment",
+    back_populates="loan_application",
+    cascade="all, delete-orphan",
+    order_by="CreditAssessment.created_at.asc()",
+    )
+    
+    fraud_assessments: Mapped[list["FraudAssessment"]] = relationship(
+    "FraudAssessment",
+    back_populates="loan_application",
+    cascade="all, delete-orphan",
+    order_by="FraudAssessment.created_at.asc()",
+    )
+    
     __table_args__ = (
         Index("ix_loan_applications_user_id", "user_id"),
         Index("ix_loan_applications_status", "status"),
