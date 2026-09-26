@@ -45,3 +45,13 @@ class AssessmentContext:
     )
     device_signals: tuple[AssessmentSignal, ...] = field(default_factory=tuple)
     additional_signals: tuple[AssessmentSignal, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        if self.user_id is None:
+            raise ValueError("user_id is required")
+        if self.loan_application_id is None:
+            raise ValueError("loan_application_id is required")
+        if self.requested_amount <= Decimal("0"):
+            raise ValueError("requested_amount must be greater than zero")
+        if self.requested_tenure_days <= 0:
+            raise ValueError("requested_tenure_days must be greater than zero")
