@@ -62,5 +62,6 @@ class TwilioSMSProvider(SMSProvider):
 
         if response.is_error:
             raise RuntimeError(
-                f"Twilio SMS provider failed with HTTP {response.status_code}"
+                f"Twilio SMS provider failed with HTTP {response.status_code}: "
+                f"{response.text}"
             )
