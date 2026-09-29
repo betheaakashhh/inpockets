@@ -50,6 +50,25 @@ class OTPVerificationRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_latest_for_update(
+        self,
+        *,
+        phone_number: str,
+        purpose: str = "login",
+    ) -> OTPVerification | None:
+        """Return the latest OTP while locking it for the verification transaction."""
+        result = await self.session.execute(
+            select(OTPVerification)
+            .where(
+                OTPVerification.phone_number == phone_number,
+                OTPVerification.purpose == purpose,
+            )
+            .order_by(OTPVerification.created_at.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def update(self, otp: OTPVerification) -> OTPVerification:
         await self.session.flush()
         return otp
