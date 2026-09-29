@@ -18,6 +18,33 @@ class UserRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id(
+        self,
+        user_id,
+    ) -> User | None:
+        result = await self.session.execute(
+            select(User).where(User.id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def create(
+        self,
+        *,
+        phone_number: str,
+    ) -> User:
+        try:
+            async with self.session.begin_nested():
+                user = User(phone_number=phone_number)
+                self.session.add(user)
+                await self.session.flush()
+        except IntegrityError:
+            existing = await self.get_by_phone_number(phone_number)
+            if existing is None:
+                raise
+            return existing
+
+        return user
+
     async def get_or_create_by_phone_number(
         self,
         phone_number: str,
@@ -38,28 +65,6 @@ class UserRepository:
             return existing, False
 
         return user, True
-
-    async def get_by_id(
-        self,
-        user_id,
-    ) -> User | None:
-        result = await self.session.execute(
-            select(User).where(User.id == user_id)
-        )
-        return result.scalar_one_or_none()
-
-    async def create(
-        self,
-        *,
-        phone_number: str,
-    ) -> User:
-        user = User(phone_number=phone_number)
-
-        self.session.add(user)
-
-        await self.session.flush()
-
-        return user
 
     async def update_status(
         self,
