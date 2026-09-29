@@ -116,7 +116,7 @@ async def verify_otp(
             detail=str(exc),
         ) from exc
 
-    otp_record = await otp_repository.get_latest(
+    otp_record = await otp_repository.get_latest_for_update(
         phone_number=request.phone_number,
         purpose="login",
     )
