@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.distributed_lock import DistributedOperationLock
 from app.domain.onboarding import OnboardingStep
 from app.domain.kyc import PANVerificationStatus
 from app.models.pan_verification import PANVerification
@@ -31,6 +32,11 @@ class PANVerificationService:
         if not PAN_PATTERN.fullmatch(pan_number):
             raise ValueError("Invalid PAN format")
 
+        lock_key = f"provider-operation:pan:{user_id}"
+        async with DistributedOperationLock(lock_key):
+            return await self._verify_locked(user_id=user_id, pan_number=pan_number)
+
+    async def _verify_locked(self, *, user_id: UUID, pan_number: str) -> PANVerification:
         onboarding = await self.onboarding_repository.get_by_user_id(user_id)
         if onboarding is None:
             raise ValueError("Onboarding has not started")
