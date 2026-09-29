@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.distributed_lock import DistributedOperationLock
 from app.domain.kyc import KYCStatus
 from app.domain.onboarding import OnboardingStep
 from app.providers.kyc import KYCProvider
@@ -34,6 +35,11 @@ class KYCService:
         self.event_repository = OnboardingEventRepository(session)
 
     async def initiate(self, *, user_id: UUID):
+        lock_key = f"provider-operation:kyc:{user_id}"
+        async with DistributedOperationLock(lock_key):
+            return await self._initiate_locked(user_id=user_id)
+
+    async def _initiate_locked(self, *, user_id: UUID):
         onboarding = await self.onboarding_repository.get_by_user_id(user_id)
         if onboarding is None:
             raise ValueError("Onboarding has not started")
