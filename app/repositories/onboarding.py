@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.onboarding import OnboardingRecord
@@ -26,15 +27,20 @@ class OnboardingRepository:
         *,
         user_id: UUID,
     ) -> OnboardingRecord:
-        onboarding = OnboardingRecord(
-            user_id=user_id,
-            status="NOT_STARTED",
-            current_step="PROFILE",
-        )
-
-        self.session.add(onboarding)
-
-        await self.session.flush()
+        try:
+            async with self.session.begin_nested():
+                onboarding = OnboardingRecord(
+                    user_id=user_id,
+                    status="NOT_STARTED",
+                    current_step="PROFILE",
+                )
+                self.session.add(onboarding)
+                await self.session.flush()
+        except IntegrityError:
+            existing = await self.get_by_user_id(user_id)
+            if existing is None:
+                raise
+            return existing
 
         return onboarding
 
@@ -52,5 +58,4 @@ class OnboardingRepository:
             onboarding.current_step = current_step
 
         await self.session.flush()
-
         return onboarding
