@@ -22,11 +22,15 @@ class OnboardingRepository:
         )
         return result.scalar_one_or_none()
 
-    async def create(
+    async def get_or_create(
         self,
         *,
         user_id: UUID,
-    ) -> OnboardingRecord:
+    ) -> tuple[OnboardingRecord, bool]:
+        existing = await self.get_by_user_id(user_id)
+        if existing is not None:
+            return existing, False
+
         try:
             async with self.session.begin_nested():
                 onboarding = OnboardingRecord(
@@ -40,8 +44,16 @@ class OnboardingRepository:
             existing = await self.get_by_user_id(user_id)
             if existing is None:
                 raise
-            return existing
+            return existing, False
 
+        return onboarding, True
+
+    async def create(
+        self,
+        *,
+        user_id: UUID,
+    ) -> OnboardingRecord:
+        onboarding, _ = await self.get_or_create(user_id=user_id)
         return onboarding
 
     async def update(
