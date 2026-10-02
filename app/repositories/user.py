@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -31,13 +32,39 @@ class UserRepository:
         *,
         phone_number: str,
     ) -> User:
-        user = User(phone_number=phone_number)
-
-        self.session.add(user)
-
-        await self.session.flush()
+        try:
+            async with self.session.begin_nested():
+                user = User(phone_number=phone_number)
+                self.session.add(user)
+                await self.session.flush()
+        except IntegrityError:
+            existing = await self.get_by_phone_number(phone_number)
+            if existing is None:
+                raise
+            return existing
 
         return user
+
+    async def get_or_create_by_phone_number(
+        self,
+        phone_number: str,
+    ) -> tuple[User, bool]:
+        existing = await self.get_by_phone_number(phone_number)
+        if existing is not None:
+            return existing, False
+
+        try:
+            async with self.session.begin_nested():
+                user = User(phone_number=phone_number)
+                self.session.add(user)
+                await self.session.flush()
+        except IntegrityError:
+            existing = await self.get_by_phone_number(phone_number)
+            if existing is None:
+                raise
+            return existing, False
+
+        return user, True
 
     async def update_status(
         self,

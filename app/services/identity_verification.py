@@ -5,10 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.kyc import IdentityVerificationStatus
 from app.domain.onboarding import OnboardingStep
 from app.core.config import get_settings
+from app.core.distributed_lock import DistributedOperationLock
 from app.providers.factory import get_identity_verification_provider
 from app.repositories.identity_verification import IdentityVerificationRepository
 from app.repositories.onboarding import OnboardingRepository
 from app.repositories.onboarding_event import OnboardingEventRepository
+
+
+def _identity_lock_key(user_id: UUID) -> str:
+    # One shared key: start and capture must never run concurrently for a user.
+    return f"provider-operation:identity:{user_id}"
 
 
 class IdentityVerificationService:
@@ -20,6 +26,12 @@ class IdentityVerificationService:
         self.event_repository = OnboardingEventRepository(session)
 
     async def start(self, *, user_id: UUID):
+        async with DistributedOperationLock(_identity_lock_key(user_id)):
+            result = await self._start_locked(user_id=user_id)
+            await self.session.commit()  # commit before releasing the lock
+            return result
+
+    async def _start_locked(self, *, user_id: UUID):
         onboarding = await self.onboarding_repository.get_by_user_id(user_id)
         if onboarding is None:
             raise ValueError("Onboarding has not started")
@@ -52,21 +64,24 @@ class IdentityVerificationService:
         return record, session.capture_session_token
 
     async def submit_capture(self, *, user_id: UUID, capture_ref: str):
-        record = await self.repository.get_latest_for_user(user_id=user_id)
-        if record is None:
-            raise ValueError("Identity verification has not been started")
+        async with DistributedOperationLock(_identity_lock_key(user_id)):
+            record = await self.repository.get_latest_for_user(user_id=user_id)
+            if record is None:
+                raise ValueError("Identity verification has not been started")
 
-        if record.status not in {
-            IdentityVerificationStatus.PENDING.value,
-            IdentityVerificationStatus.RETRY_REQUIRED.value,
-            IdentityVerificationStatus.PROCESSING.value,
-        }:
-            raise ValueError(
-                f"Identity capture is not allowed while status is {record.status}"
-            )
+            if record.status not in {
+                IdentityVerificationStatus.PENDING.value,
+                IdentityVerificationStatus.RETRY_REQUIRED.value,
+                IdentityVerificationStatus.PROCESSING.value,
+            }:
+                raise ValueError(
+                    f"Identity capture is not allowed while status is {record.status}"
+                )
 
-        result = await self.provider.submit_capture(record.provider_ref, capture_ref)
-        return await self._apply_result(user_id=user_id, record=record, result=result)
+            result = await self.provider.submit_capture(record.provider_ref, capture_ref)
+            applied = await self._apply_result(user_id=user_id, record=record, result=result)
+            await self.session.commit()  # commit before releasing the lock
+            return applied
 
     async def get_status(self, *, user_id: UUID):
         record = await self.repository.get_latest_for_user(user_id=user_id)

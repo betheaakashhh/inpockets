@@ -84,6 +84,8 @@ class AdminCustomerRepository:
                 OnboardingRecord,
                 self._pan_status_subquery().label("pan_status"),
                 self._pan_masked_subquery().label("pan_number_masked"),
+                self._kyc_status_subquery().label("kyc_status"),
+                self._identity_status_subquery().label("identity_verification_status"),
             )
             .outerjoin(UserProfile, UserProfile.user_id == User.id)
             .outerjoin(OnboardingRecord, OnboardingRecord.user_id == User.id)
