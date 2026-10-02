@@ -1,9 +1,13 @@
 from __future__ import annotations
-
+import asyncio
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from app.domain.fraud import FraudAssessmentStatus
+from app.domain.fraud import (
+    FraudAssessmentResult,
+    FraudAssessmentStatus,
+    FraudRiskLevel,
+)
 from app.providers.fraud import FraudProvider
 from app.repositories.fraud_assessment import FraudAssessmentRepository
 
@@ -33,10 +37,19 @@ class FraudAssessmentService:
 
         requested_at = datetime.now(timezone.utc)
 
-        result = await self.provider.assess_fraud(
-            user_id=user_id,
-            application_id=application_id,
-        )
+        try:
+            result = await self.provider.assess_fraud(
+                user_id=user_id,
+                application_id=application_id,
+            )
+        except asyncio.TimeoutError:
+            result = FraudAssessmentResult(
+                provider="unknown",
+                provider_reference=f"timeout-{application_id}-{uuid4().hex}",
+                status=FraudAssessmentStatus.FAILED,
+                risk_level=FraudRiskLevel.UNKNOWN,
+                failure_reason="fraud provider timeout",
+            )
 
         received_at = datetime.now(timezone.utc)
 

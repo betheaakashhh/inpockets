@@ -1,9 +1,9 @@
 from __future__ import annotations
-
+import asyncio
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from app.domain.credit import CreditAssessmentStatus
+from app.domain.credit import CreditAssessmentResult, CreditAssessmentStatus
 from app.models.credit_assessment import CreditAssessment
 from app.providers.credit_bureau import CreditBureauProvider
 from app.repositories.credit_assessment import CreditAssessmentRepository
@@ -43,11 +43,19 @@ class CreditAssessmentService:
 
         requested_at = datetime.now(timezone.utc)
 
-        result = await self.provider.assess_credit(
-            user_id=user_id,
-            application_id=application_id,
-            consent_reference=str(consent_id),
-        )
+        try:
+            result = await self.provider.assess_credit(
+                user_id=user_id,
+                application_id=application_id,
+                consent_reference=str(consent_id),
+            )
+        except asyncio.TimeoutError:
+            result = CreditAssessmentResult(
+                provider="unknown",
+                provider_reference=f"timeout-{application_id}-{uuid4().hex}",
+                status=CreditAssessmentStatus.FAILED,
+                failure_reason="credit provider timeout",
+            )
 
         report = result.report
 

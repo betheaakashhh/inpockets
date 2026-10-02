@@ -102,6 +102,19 @@ class LoanApplication(Base):
         order_by="RiskAssessment.created_at.asc()",
     )
     
+    policy_evaluations: Mapped[list["PolicyEvaluation"]] = relationship(
+    "PolicyEvaluation",
+    back_populates="loan_application",
+    cascade="all, delete-orphan",
+    order_by="PolicyEvaluation.evaluated_at.asc()",
+    )
+    
+    loan_decisions: Mapped[list["LoanDecision"]] = relationship(
+    "LoanDecision",
+    back_populates="loan_application",
+    cascade="all, delete-orphan",
+    order_by="LoanDecision.decided_at.asc()",
+    )
     __table_args__ = (
         Index("ix_loan_applications_user_id", "user_id"),
         Index("ix_loan_applications_status", "status"),
