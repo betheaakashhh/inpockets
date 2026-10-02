@@ -15,6 +15,7 @@ from app.domain.onboarding import (
     is_valid_step_transition,
 )
 
+
 class OnboardingService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -28,19 +29,15 @@ class OnboardingService:
         *,
         user_id: UUID,
     ) -> OnboardingRecord:
-        onboarding = await self.onboarding_repository.get_by_user_id(user_id)
-
-        if onboarding is not None:
-            return onboarding
-
-        onboarding = await self.onboarding_repository.create(
+        onboarding, created = await self.onboarding_repository.get_or_create(
             user_id=user_id,
         )
 
-        await self.event_repository.create(
-            onboarding_id=onboarding.id,
-            event_type="ONBOARDING_STARTED",
-        )
+        if created:
+            await self.event_repository.create(
+                onboarding_id=onboarding.id,
+                event_type="ONBOARDING_STARTED",
+            )
 
         return onboarding
 
@@ -78,11 +75,11 @@ class OnboardingService:
         )
 
     async def update_onboarding_step(
-    self,
-    *,
-    user_id: UUID,
-    current_step: str,
-) -> OnboardingRecord:
+        self,
+        *,
+        user_id: UUID,
+        current_step: str,
+    ) -> OnboardingRecord:
         onboarding = await self.get_or_create_onboarding(user_id=user_id)
 
         try:
