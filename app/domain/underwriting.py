@@ -137,3 +137,68 @@ class ReviewEvidence:
             raise ValueError("metadata is required")
         if self.created_at is None:
             raise ValueError("created_at is required")
+        
+class UnderwritingOverrideStatus(StrEnum):
+    REQUESTED = "REQUESTED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+@dataclass(frozen=True)
+class UnderwritingOverride:
+    id: UUID
+    review_case_id: UUID
+    requested_by_admin_user_id: UUID
+
+    override_type: str
+    original_value: dict[str, object]
+    requested_value: dict[str, object]
+
+    reason: str
+
+    status: UnderwritingOverrideStatus = UnderwritingOverrideStatus.REQUESTED
+
+    approved_by_admin_user_id: UUID | None = None
+    approved_at: datetime | None = None
+    rejected_at: datetime | None = None
+
+    created_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if self.id is None:
+            raise ValueError("override id is required")
+
+        if self.review_case_id is None:
+            raise ValueError("review_case_id is required")
+
+        if self.requested_by_admin_user_id is None:
+            raise ValueError("requested_by_admin_user_id is required")
+
+        if not self.override_type.strip():
+            raise ValueError("override_type is required")
+
+        if not self.reason.strip():
+            raise ValueError("override reason is required")
+
+        if not self.original_value:
+            raise ValueError("original_value is required")
+
+        if not self.requested_value:
+            raise ValueError("requested_value is required")
+
+        if self.status == UnderwritingOverrideStatus.APPROVED:
+            if self.approved_by_admin_user_id is None:
+                raise ValueError(
+                    "approved override requires an approver"
+                )
+
+            if self.approved_at is None:
+                raise ValueError(
+                    "approved override requires approved_at"
+                )
+
+        if self.status == UnderwritingOverrideStatus.REJECTED:
+            if self.rejected_at is None:
+                raise ValueError(
+                    "rejected override requires rejected_at"
+                )

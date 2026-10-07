@@ -33,4 +33,15 @@ class DevelopmentIdentityVerificationProvider(IdentityVerificationProvider):
         provider_ref: str,
         capture_ref: str,
     ) -> IdentityVerificationResult:
-        return IdentityVerificationResult(status=self._result())
+        return IdentityVerificationResult(status="VERIFIED")
+
+
+
+# for production identity provider, the submit_capture method would typically involve sending the captured data to the provider's API and receiving a response indicating the result of the identity verification process. In this development implementation, it simply returns a predetermined result based on the configuration.
+
+#   async def submit_capture(
+#         self,
+#         provider_ref: str,
+#         capture_ref: str,
+#     ) -> IdentityVerificationResult:
+#         return IdentityVerificationResult(status=self._result())

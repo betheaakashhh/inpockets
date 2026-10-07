@@ -28,6 +28,7 @@ from app.models.admin_role_permission import AdminRolePermission
 from app.models.underwriting_review_case import UnderwritingReviewCase
 from app.models.underwriting_review_note import UnderwritingReviewNote
 from app.models.underwriting_review_evidence import UnderwritingReviewEvidence
+from app.models.underwriting_override import UnderwritingOverride
 
 __all__ = [
     "User",
@@ -61,4 +62,5 @@ __all__ = [
     "UnderwritingReviewCase",
     "UnderwritingReviewNote",
     "UnderwritingReviewEvidence",
+    "UnderwritingOverride",
 ]

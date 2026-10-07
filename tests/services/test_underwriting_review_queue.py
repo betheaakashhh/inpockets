@@ -27,6 +27,7 @@ def make_case(
 def make_service():
     repository = AsyncMock()
     authorization = AsyncMock()
+    audit_log_service = AsyncMock()
 
     admin_user_repository = AsyncMock()
     authorization.admin_user_repository = admin_user_repository
@@ -34,14 +35,20 @@ def make_service():
     service = UnderwritingReviewService(
         review_case_repository=repository,
         admin_authorization_service=authorization,
+        audit_log_service=audit_log_service,
     )
 
-    return service, repository, authorization, admin_user_repository
-
-
+    return (
+        service,
+        repository,
+        authorization,
+        admin_user_repository,
+        audit_log_service,
+    )
+    
 @pytest.mark.asyncio
 async def test_authorized_reviewer_can_list_queue():
-    service, repository, authorization, _ = make_service()
+    service, repository, authorization, _, _ = make_service()
 
     cases = [make_case(), make_case()]
     repository.list_by_status.return_value = cases
@@ -58,7 +65,7 @@ async def test_authorized_reviewer_can_list_queue():
 
 @pytest.mark.asyncio
 async def test_unauthorized_role_cannot_list_queue():
-    service, repository, authorization, _ = make_service()
+    service, repository, authorization, _, _ = make_service()
     authorization.require_permission.side_effect = PermissionError(
         "role does not have permission"
     )
@@ -71,7 +78,7 @@ async def test_unauthorized_role_cannot_list_queue():
 
 @pytest.mark.asyncio
 async def test_admin_can_list_my_assigned_cases():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, _ = make_service()
 
     actor_user_id = uuid4()
     admin_record = type("AdminUserRecord", (), {"id": uuid4()})()
@@ -103,7 +110,7 @@ async def test_admin_can_list_my_assigned_cases():
 
 @pytest.mark.asyncio
 async def test_my_cases_requires_admin_record():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, _ = make_service()
 
     admin_user_repository.get_by_user_id.return_value = None
 
@@ -115,15 +122,20 @@ async def test_my_cases_requires_admin_record():
 
 @pytest.mark.asyncio
 async def test_admin_can_claim_queued_case():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, audit_log_service = make_service()
 
     actor_user_id = uuid4()
     admin_record = type("AdminUserRecord", (), {"id": uuid4()})()
     case = make_case()
 
+    assigned_case = make_case(
+        status=UnderwritingReviewStatus.ASSIGNED,
+        assigned_admin_user_id=admin_record.id,
+    )
+
     admin_user_repository.get_by_user_id.return_value = admin_record
     repository.get_by_id.return_value = case
-    repository.assign.return_value = case
+    repository.assign.return_value = assigned_case
 
     result = await service.claim_case(
         actor_user_id=actor_user_id,
@@ -138,12 +150,29 @@ async def test_admin_can_claim_queued_case():
         case_id=case.id,
         admin_user_id=admin_record.id,
     )
-    assert result == case
+    assert result == assigned_case
+
+    audit_log_service.record_admin_action.assert_awaited_once()
+
+    audit = audit_log_service.record_admin_action.await_args.kwargs
+
+    assert audit["actor_user_id"] == actor_user_id
+    assert audit["action"] == "UNDERWRITING_CASE_CLAIMED"
+    assert audit["entity_type"] == "underwriting_review_case"
+    assert audit["entity_id"] == str(case.id)
+    assert audit["old_value"] == {
+        "assigned_admin_user_id": None,
+        "status": UnderwritingReviewStatus.QUEUED.value,
+    }
+    assert audit["new_value"] == {
+        "assigned_admin_user_id": str(admin_record.id),
+        "status": UnderwritingReviewStatus.ASSIGNED.value,
+    }
 
 
 @pytest.mark.asyncio
 async def test_claim_changes_case_to_assigned_via_repository():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, _ = make_service()
 
     admin_record = type("AdminUserRecord", (), {"id": uuid4()})()
     case = make_case()
@@ -168,7 +197,7 @@ async def test_claim_changes_case_to_assigned_via_repository():
 
 @pytest.mark.asyncio
 async def test_cannot_claim_already_assigned_case():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, _ = make_service()
 
     admin_user_repository.get_by_user_id.return_value = type(
         "AdminUserRecord", (), {"id": uuid4()}
@@ -194,7 +223,7 @@ async def test_cannot_claim_already_assigned_case():
 
 @pytest.mark.asyncio
 async def test_cannot_claim_in_review_case():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, _ = make_service()
 
     admin_user_repository.get_by_user_id.return_value = type(
         "AdminUserRecord", (), {"id": uuid4()}
@@ -217,7 +246,7 @@ async def test_cannot_claim_in_review_case():
 
 @pytest.mark.asyncio
 async def test_non_admin_cannot_claim_case():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, _ = make_service()
 
     admin_user_repository.get_by_user_id.return_value = None
     case = make_case()
@@ -234,7 +263,7 @@ async def test_non_admin_cannot_claim_case():
 
 @pytest.mark.asyncio
 async def test_claim_missing_case_raises_not_found():
-    service, repository, authorization, admin_user_repository = make_service()
+    service, repository, authorization, admin_user_repository, _ = make_service()
 
     admin_user_repository.get_by_user_id.return_value = type(
         "AdminUserRecord", (), {"id": uuid4()}

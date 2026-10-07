@@ -152,3 +152,4 @@ def test_review_case_can_reference_decision_and_assigned_admin() -> None:
     assert case.loan_decision_id == decision_id
     assert case.assigned_admin_user_id == admin_user_id
     assert case.is_open is True
+

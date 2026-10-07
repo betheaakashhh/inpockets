@@ -3,7 +3,9 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.domain.admin import AdminPermission
+from app.repositories.audit_log import AuditLogRepository
 from app.repositories.admin_user import AdminUserRepository
+from app.services.audit_log import AuditLogService
 from app.repositories.underwriting_review_case import (
     UnderwritingReviewCaseRepository,
 )
@@ -18,9 +20,11 @@ class UnderwritingReviewService:
         *,
         review_case_repository: UnderwritingReviewCaseRepository,
         admin_authorization_service: AdminAuthorizationService,
+        audit_log_service: AuditLogService,
     ):
         self.review_case_repository = review_case_repository
         self.admin_authorization_service = admin_authorization_service
+        self.audit_log_service = audit_log_service
 
     async def assign_case(
         self,
@@ -42,10 +46,31 @@ class UnderwritingReviewService:
         if not case.is_open:
             raise ValueError("underwriting review case is already closed")
 
-        return await self.review_case_repository.assign(
+        result = await self.review_case_repository.assign(
             case_id=case_id,
             admin_user_id=assignee_admin_user_id,
         )
+
+        await self.audit_log_service.record_admin_action(
+            actor_user_id=actor_user_id,
+            action="UNDERWRITING_CASE_ASSIGNED",
+            entity_type="underwriting_review_case",
+            entity_id=str(case_id),
+            old_value={
+                "assigned_admin_user_id": (
+                    str(case.assigned_admin_user_id)
+                    if case.assigned_admin_user_id
+                    else None
+                ),
+                "status": case.status.value,
+            },
+            new_value={
+                "assigned_admin_user_id": str(assignee_admin_user_id),
+                "status": result.status.value,
+            },
+        )
+
+        return result
 
     async def start_review(
         self,
@@ -84,9 +109,24 @@ class UnderwritingReviewService:
                 "underwriting review case is assigned to another admin"
             )
 
-        return await self.review_case_repository.start_review(
+        result = await self.review_case_repository.start_review(
             case_id=case_id,
         )
+
+        await self.audit_log_service.record_admin_action(
+            actor_user_id=actor_user_id,
+            action="UNDERWRITING_REVIEW_STARTED",
+            entity_type="underwriting_review_case",
+            entity_id=str(case_id),
+            old_value={
+                "status": case.status.value,
+            },
+            new_value={
+                "status": result.status.value,
+            },
+        )
+
+        return result
 
     async def approve_case(
         self,
@@ -106,10 +146,25 @@ class UnderwritingReviewService:
 
         self._require_reviewable_case(case)
 
-        return await self.review_case_repository.complete(
+        result = await self.review_case_repository.complete(
             case_id=case_id,
             status="APPROVED",
         )
+
+        await self.audit_log_service.record_admin_action(
+            actor_user_id=actor_user_id,
+            action="UNDERWRITING_CASE_APPROVED",
+            entity_type="underwriting_review_case",
+            entity_id=str(case_id),
+            old_value={
+                "status": case.status.value,
+            },
+            new_value={
+                "status": result.status.value,
+            },
+        )
+
+        return result
 
     async def reject_case(
         self,
@@ -129,10 +184,25 @@ class UnderwritingReviewService:
 
         self._require_reviewable_case(case)
 
-        return await self.review_case_repository.complete(
+        result = await self.review_case_repository.complete(
             case_id=case_id,
             status="REJECTED",
         )
+
+        await self.audit_log_service.record_admin_action(
+            actor_user_id=actor_user_id,
+            action="UNDERWRITING_CASE_REJECTED",
+            entity_type="underwriting_review_case",
+            entity_id=str(case_id),
+            old_value={
+                "status": case.status.value,
+            },
+            new_value={
+                "status": result.status.value,
+            },
+        )
+
+        return result
 
     async def close_case(
         self,
@@ -153,11 +223,26 @@ class UnderwritingReviewService:
         if not case.is_open:
             raise ValueError("underwriting review case is already closed")
 
-        return await self.review_case_repository.complete(
+        result = await self.review_case_repository.complete(
             case_id=case_id,
             status="CLOSED",
         )
-    
+
+        await self.audit_log_service.record_admin_action(
+            actor_user_id=actor_user_id,
+            action="UNDERWRITING_CASE_CLOSED",
+            entity_type="underwriting_review_case",
+            entity_id=str(case_id),
+            old_value={
+                "status": case.status.value,
+            },
+            new_value={
+                "status": result.status.value,
+            },
+        )
+
+        return result
+
     async def list_queue(
         self,
         *,
@@ -182,7 +267,7 @@ class UnderwritingReviewService:
         await self.admin_authorization_service.require_permission(
             user_id=actor_user_id,
             permission=AdminPermission.UNDERWRITING_REVIEW,
-    )
+        )
 
         actor_admin = (
             await self.admin_authorization_service.admin_user_repository
@@ -196,7 +281,6 @@ class UnderwritingReviewService:
             admin_user_id=actor_admin.id,
             status=status,
         )
-
 
     async def claim_case(
         self,
@@ -227,10 +311,27 @@ class UnderwritingReviewService:
                 "only QUEUED underwriting review cases can be claimed"
             )
 
-        return await self.review_case_repository.assign(
+        result = await self.review_case_repository.assign(
             case_id=case_id,
             admin_user_id=actor_admin.id,
         )
+
+        await self.audit_log_service.record_admin_action(
+            actor_user_id=actor_user_id,
+            action="UNDERWRITING_CASE_CLAIMED",
+            entity_type="underwriting_review_case",
+            entity_id=str(case_id),
+            old_value={
+                "assigned_admin_user_id": None,
+                "status": case.status.value,
+            },
+            new_value={
+                "assigned_admin_user_id": str(actor_admin.id),
+                "status": result.status.value,
+            },
+        )
+
+        return result
 
     @staticmethod
     def _require_reviewable_case(case) -> None:
