@@ -1,6 +1,6 @@
 from decimal import Decimal
 from uuid import uuid4
-
+import asyncio
 import pytest # type: ignore
 from datetime import datetime, timezone
 
@@ -266,3 +266,50 @@ async def test_assess_persists_processing_result(
     assert assessment.bureau_score is None
 
     await db_session.commit()
+
+@pytest.mark.asyncio
+async def test_provider_timeout_is_persisted_as_failed_assessment(
+    db_session,
+    user,
+):
+    application = await create_test_loan_application(
+        db_session,
+        user,
+    )
+
+    class TimeoutProvider:
+        async def assess_credit(
+            self,
+            *,
+            user_id,
+            application_id,
+            consent_reference,
+        ):
+            raise asyncio.TimeoutError
+
+    repository = CreditAssessmentRepository(db_session)
+    service = CreditAssessmentService(
+        repository=repository,
+        provider=TimeoutProvider(),
+    )
+
+    consent = await create_test_consent(
+        db_session,
+        user,
+    )
+
+    assessment = await service.assess(
+        user_id=user.id,
+        application_id=application.id,
+        consent_id=consent.id,
+    )
+
+    assert assessment.status == CreditAssessmentStatus.FAILED
+    assert assessment.bureau_score is None
+    assert assessment.failure_reason == "credit provider timeout"
+
+    history = await repository.list_by_loan_application(
+        application.id
+    )
+
+    assert len(history) == 1

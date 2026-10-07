@@ -17,6 +17,18 @@ from app.models.credit_assessment import CreditAssessment
 from app.models.fraud_assessment import FraudAssessment
 from app.models.affordability_assessment import AffordabilityAssessment
 from app.models.risk_assessment import RiskAssessment
+from app.models.policy_version import PolicyVersion
+from app.models.policy_rule import PolicyRule
+from app.models.policy_evaluation import PolicyEvaluation
+from app.models.loan_decision import LoanDecision
+from app.models.loan_level import LoanLevel
+from app.models.admin_role import AdminRoleRecord
+from app.models.admin_permission import AdminPermissionRecord
+from app.models.admin_role_permission import AdminRolePermission
+from app.models.underwriting_review_case import UnderwritingReviewCase
+from app.models.underwriting_review_note import UnderwritingReviewNote
+from app.models.underwriting_review_evidence import UnderwritingReviewEvidence
+from app.models.underwriting_override import UnderwritingOverride
 
 __all__ = [
     "User",
@@ -39,4 +51,16 @@ __all__ = [
     "FraudAssessment",
     "AffordabilityAssessment",
     "RiskAssessment",
+    "PolicyVersion",
+    "PolicyRule",
+    "PolicyEvaluation",
+    "LoanDecision",
+    "LoanLevel",
+    "AdminRoleRecord",
+    "AdminPermissionRecord",
+    "AdminRolePermission",
+    "UnderwritingReviewCase",
+    "UnderwritingReviewNote",
+    "UnderwritingReviewEvidence",
+    "UnderwritingOverride",
 ]

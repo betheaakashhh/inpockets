@@ -25,7 +25,19 @@ class DevelopmentKYCProvider(KYCProvider):
         )
 
     async def get_status(self, provider_ref: str) -> KYCStatusResult:
-        return KYCStatusResult(status=self._result())
+        return KYCStatusResult(status="VERIFIED")
 
     async def fetch_document(self, provider_document_ref: str):
         raise NotImplementedError("Development KYC provider does not provide documents")
+
+
+
+#+++++++++++++++development KYC provider does not provide documents++++++++++++++
+# Fix — two one-line edits, purely for local preview, trivially revertible:
+
+# In app/providers/kyc_development.py:
+
+# python
+# async def get_status(self, provider_ref: str) -> KYCStatusResult:
+#     return KYCStatusResult(status=self._result())   # change to:
+#     return KYCStatusResult(status="VERIFIED")

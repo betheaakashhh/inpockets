@@ -17,6 +17,9 @@ from app.models.pan_verification import PANVerification
 from app.models.identity_verification import IdentityVerification
 from app.models.user_session import UserSession
 from app.models.admin_user import AdminUser
+from app.models.policy_evaluation import PolicyEvaluation
+from app.models.policy_rule import PolicyRule
+from app.models.policy_version import PolicyVersion
 
 
 settings = get_settings()
@@ -34,6 +37,10 @@ def event_loop_policy():
 @pytest_asyncio.fixture(autouse=True)
 async def clean_database() -> None:
     async for session in get_db_session():
+        await session.execute(delete(PolicyEvaluation))
+        await session.execute(delete(PolicyRule))
+        await session.execute(delete(PolicyVersion))
+
         await session.execute(delete(KYCDocument))
         await session.execute(delete(PANVerification))
         await session.execute(delete(IdentityVerification))
@@ -45,7 +52,6 @@ async def clean_database() -> None:
         await session.execute(delete(User))
         await session.commit()
         break
-
 @pytest_asyncio.fixture
 async def db_session():
     async for session in get_db_session():

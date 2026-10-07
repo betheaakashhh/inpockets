@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
-
+import asyncio
 import pytest
 
 from app.domain.fraud import (
@@ -277,3 +277,42 @@ async def test_failed_previous_assessment_does_not_block_retry(
     )
 
     assert len(history) == 2
+@pytest.mark.asyncio
+async def test_provider_timeout_is_persisted_as_failed_assessment(
+    db_session,
+    user,
+):
+    application = await create_test_loan_application(
+        db_session,
+        user,
+    )
+
+    class TimeoutProvider(FraudProvider):
+        async def assess_fraud(
+            self,
+            *,
+            user_id,
+            application_id,
+        ):
+            raise asyncio.TimeoutError
+
+    repository = FraudAssessmentRepository(db_session)
+    service = FraudAssessmentService(
+        repository,
+        TimeoutProvider(),
+    )
+
+    assessment = await service.assess(
+        user_id=user.id,
+        application_id=application.id,
+    )
+
+    assert assessment.status == "FAILED"
+    assert assessment.risk_level == "UNKNOWN"
+    assert assessment.failure_reason == "fraud provider timeout"
+
+    history = await repository.list_by_loan_application(
+        application.id
+    )
+
+    assert len(history) == 1
