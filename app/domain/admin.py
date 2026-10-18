@@ -20,6 +20,8 @@ class AdminPermission(StrEnum):
 
     LOAN_APPLICATION_READ = "LOAN_APPLICATION_READ"
     LOAN_APPLICATION_REVIEW = "LOAN_APPLICATION_REVIEW"
+    LOAN_OFFER_ISSUE = "LOAN_OFFER_ISSUE"
+    LOAN_OFFER_CANCEL = "LOAN_OFFER_CANCEL"
 
     KYC_REVIEW = "KYC_REVIEW"
     FRAUD_REVIEW = "FRAUD_REVIEW"
@@ -64,6 +66,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.LOAN_OVERRIDE,
             AdminPermission.LOAN_OVERRIDE_APPROVE,
             AdminPermission.DISBURSEMENT_READ,
+            AdminPermission.LOAN_OFFER_ISSUE,
+            AdminPermission.LOAN_OFFER_CANCEL,
         }
     ),
 

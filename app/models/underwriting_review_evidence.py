@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -51,10 +51,10 @@ class UnderwritingReviewEvidence(Base):
 
     evidence_metadata: Mapped[dict[str, object]] = mapped_column(
         "metadata",
-        JSON,
+        JSONB,
         nullable=False,
         default=dict,
-)
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

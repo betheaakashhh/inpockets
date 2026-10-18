@@ -67,3 +67,22 @@ async def test_delete_removes_document_and_metadata(
     assert not document_path.exists()
     assert not metadata_path.exists()
     assert not await storage.exists(stored.storage_ref)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ref", ["../outside", "a/../../outside", "sub/dir", "..\\x"])
+async def test_unsafe_refs_cannot_escape_storage_root(tmp_path, monkeypatch, ref):
+    class FakeSettings:
+        document_storage_path = str(tmp_path / "root")
+
+    monkeypatch.setattr(
+        "app.providers.storage_development.get_settings", lambda: FakeSettings()
+    )
+    (tmp_path / "outside").write_bytes(b"secret")
+    (tmp_path / "outside.meta").write_text("text/plain")
+    storage = DevelopmentDocumentStorage()
+
+    assert await storage.exists(ref) is False
+    with pytest.raises(FileNotFoundError):
+        await storage.get(ref)
+    await storage.delete(ref)
+    assert (tmp_path / "outside").exists()  # delete did not reach outside the root

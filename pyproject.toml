@@ -19,6 +19,8 @@ dependencies = [
     "redis",
     "httpx",
     "python-multipart>=0.0.20",
+    "reportlab>=4.2,<5",
+    "boto3",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +28,8 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "httpx",
+    "pypdf",
+    "moto[s3]",
     "ruff",
     "mypy",
 ]

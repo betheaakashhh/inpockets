@@ -24,9 +24,36 @@ class Settings(BaseSettings):
     kyc_provider: str = "development"
     document_storage_provider: str = "development"
     document_storage_path: str = ".data/documents"
+    # S3 provider (document_storage_provider="s3"). Credentials come from the
+    # AWS default chain (task/instance role); never from settings or code.
+    document_storage_s3_bucket: str | None = None
+    document_storage_s3_region: str | None = None
+    document_storage_s3_prefix: str = ""
+    document_storage_s3_kms_key_id: str | None = None
+    document_storage_s3_endpoint_url: str | None = None
     identity_verification_provider: str = "development"
+    esign_provider: str = "development"
+    # Shared secret for verifying signed e-sign callbacks (from secrets
+    # manager / env; never in code). Unset means every callback is rejected.
+    esign_webhook_secret: str | None = None
+    esign_callback_tolerance_seconds: int = 300
+    # How long a customer has to sign. Lender policy owns the real value.
+    esign_validity_hours: int = 72
+    esign_provider_timeout_seconds: float = 10.0
+    # When true, a SIGNED callback without a retrievable signed artifact goes
+    # to manual review instead of being trusted.
+    esign_require_signed_artifact: bool = True
     dev_kyc_result: str = "PENDING"
     dev_identity_result: str = "PROCESSING"
+    # Default offer validity window. Lender/credit policy owns the real value.
+    loan_offer_validity_hours: int = 168
+    # Versioned KFS/agreement templates. Built-in templates are drafts; approved
+    # lender templates are loaded from JSON files in this directory.
+    loan_offer_template_dir: str | None = None
+    loan_offer_kfs_template_version: str = "draft-v1"
+    loan_offer_agreement_template_version: str = "draft-v1"
+    # Regulated lender identity printed on KFS/agreement (lender configuration).
+    lender_name: str | None = None
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None

@@ -61,3 +61,63 @@ class AuditLogService:
             new_value=new_value,
             event_metadata=event_metadata,
         )
+
+    async def record_customer_action(
+        self,
+        *,
+        actor_user_id: UUID,
+        action: str,
+        entity_type: str,
+        entity_id: str,
+        request_id: str | None = None,
+        ip_address: str | None = None,
+        reason: str | None = None,
+        old_value: dict | None = None,
+        new_value: dict | None = None,
+        event_metadata: dict | None = None,
+    ):
+        """Audit an action taken by a customer (not an admin)."""
+        return await self.audit_log_repository.create(
+            actor_admin_user_id=None,
+            actor_role="CUSTOMER",
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            request_id=request_id,
+            ip_address=ip_address,
+            reason=reason,
+            old_value=old_value,
+            new_value=new_value,
+            event_metadata={
+                **(event_metadata or {}),
+                "actor_type": "CUSTOMER",
+                "actor_user_id": str(actor_user_id),
+            },
+        )
+
+    async def record_system_action(
+        self,
+        *,
+        action: str,
+        entity_type: str,
+        entity_id: str,
+        reason: str | None = None,
+        old_value: dict | None = None,
+        new_value: dict | None = None,
+        event_metadata: dict | None = None,
+    ):
+        """Audit an automated (worker/scheduler) action."""
+        return await self.audit_log_repository.create(
+            actor_admin_user_id=None,
+            actor_role="SYSTEM",
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            reason=reason,
+            old_value=old_value,
+            new_value=new_value,
+            event_metadata={
+                **(event_metadata or {}),
+                "actor_type": "SYSTEM",
+            },
+        )

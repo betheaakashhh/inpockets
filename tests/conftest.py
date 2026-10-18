@@ -4,7 +4,7 @@ import selectors
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 from uuid import uuid4
 from app.core.config import get_settings
 from app.db.session import get_db_session
@@ -45,9 +45,16 @@ async def clean_database() -> None:
         await session.execute(delete(PANVerification))
         await session.execute(delete(IdentityVerification))
         await session.execute(delete(KYCRecord))
-        await session.execute(delete(Document))
+        # documents <-> loan_offers reference each other (RESTRICT) and issued
+        # offers are immutable by trigger, so neither side can be deleted or
+        # nulled row-by-row. TRUNCATE clears both together (test DB only).
+        await session.execute(text("TRUNCATE esign_events, esign_transactions, loan_offers, documents CASCADE"))
         await session.execute(delete(UserSession))
         await session.execute(delete(OTPVerification))
+        # audit_logs is append-only by trigger (and its admin FK is SET NULL,
+        # which counts as an UPDATE), so committed audit rows must be cleared
+        # with TRUNCATE before admin users can be removed. Test DB only.
+        await session.execute(text("TRUNCATE audit_logs"))
         await session.execute(delete(AdminUser))
         await session.execute(delete(User))
         await session.commit()

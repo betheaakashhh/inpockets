@@ -12,6 +12,12 @@ from app.api.v1.loan_application import router as loan_application_router
 from app.api.v1.admin_loan_application import (
     router as admin_loan_application_router,
 )
+from app.api.v1.loan_offer import router as loan_offer_router
+from app.api.v1.admin_loan_offer import router as admin_loan_offer_router
+
+from app.api.v1.esign import router as esign_router
+from app.api.v1.admin_esign import router as admin_esign_router
+from app.api.v1.webhooks_esign import router as webhooks_esign_router
 
 api_router = APIRouter()
 
@@ -71,4 +77,34 @@ api_router.include_router(
     admin_loan_application_router,
     prefix="/admin/loan-applications",
     tags=["Admin Loan Applications"],
+)
+
+api_router.include_router(
+    loan_offer_router,
+    prefix="/loan-offers",
+    tags=["Loan Offers"],
+)
+
+api_router.include_router(
+    admin_loan_offer_router,
+    prefix="/admin/loan-offers",
+    tags=["Admin Loan Offers"],
+)
+
+api_router.include_router(
+    esign_router,
+    prefix="/loan-offers",
+    tags=["E-Sign"],
+)
+
+api_router.include_router(
+    admin_esign_router,
+    prefix="/admin/loan-offers",
+    tags=["Admin E-Sign"],
+)
+
+api_router.include_router(
+    webhooks_esign_router,
+    prefix="/webhooks",
+    tags=["Webhooks"],
 )

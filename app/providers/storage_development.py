@@ -15,11 +15,18 @@ class DevelopmentDocumentStorage(DocumentStorage):
     def _root(self) -> Path:
         return Path(get_settings().document_storage_path)
 
+    def _confined(self, name: str) -> Path:
+        root = self._root().resolve()
+        path = (root / name).resolve()
+        if root != path.parent:
+            raise ValueError("Invalid storage reference")
+        return path
+
     def _path_for(self, storage_ref: str) -> Path:
-        return self._root() / storage_ref
+        return self._confined(storage_ref)
 
     def _metadata_path_for(self, storage_ref: str) -> Path:
-        return self._root() / f"{storage_ref}.meta"
+        return self._confined(f"{storage_ref}.meta")
 
     async def put(
         self,
@@ -57,8 +64,13 @@ class DevelopmentDocumentStorage(DocumentStorage):
         self,
         storage_ref: str,
     ) -> StoredDocumentContent:
-        path = self._path_for(storage_ref)
-        metadata_path = self._metadata_path_for(storage_ref)
+        try:
+            path = self._path_for(storage_ref)
+            metadata_path = self._metadata_path_for(storage_ref)
+        except ValueError as exc:
+            raise FileNotFoundError(
+                f"Document not found in development storage: {storage_ref}"
+            ) from exc
 
         if not path.exists():
             raise FileNotFoundError(
@@ -81,14 +93,20 @@ class DevelopmentDocumentStorage(DocumentStorage):
         self,
         storage_ref: str,
     ) -> bool:
-        return self._path_for(storage_ref).exists()
+        try:
+            return self._path_for(storage_ref).exists()
+        except ValueError:
+            return False  # an unsafe reference can never name a stored object
 
     async def delete(
         self,
         storage_ref: str,
     ) -> None:
-        path = self._path_for(storage_ref)
-        metadata_path = self._metadata_path_for(storage_ref)
+        try:
+            path = self._path_for(storage_ref)
+            metadata_path = self._metadata_path_for(storage_ref)
+        except ValueError:
+            return
 
         if path.exists():
             path.unlink()
