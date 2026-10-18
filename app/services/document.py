@@ -88,6 +88,10 @@ class DocumentService:
         content_type: str,
         key_hint: str,
         immutable: bool = False,
+        loan_offer_id: UUID | None = None,
+        loan_offer_version: int | None = None,
+        template_key: str | None = None,
+        template_version: str | None = None,
     ):
         if not owner_type:
             raise ValueError("Document owner type is required")
@@ -97,13 +101,53 @@ class DocumentService:
 
         if not content_type:
             raise ValueError("Document content type is required")
+        provenance = (
+            loan_offer_id,
+            loan_offer_version,
+            template_key,
+            template_version,
+        )
+        has_provenance = any(value is not None for value in provenance)
 
+        if has_provenance:
+            if any(value is None for value in provenance):
+                raise ValueError(
+                    "Loan-offer document provenance must be complete"
+                )
+
+            if loan_offer_version < 1:
+                raise ValueError(
+                    "Loan-offer document version must be positive"
+                )
+
+            if not template_key.strip() or not template_version.strip():
+                raise ValueError(
+                    "Document template key and version are required"
+                )
+
+            if not immutable:
+                raise ValueError(
+                    "Loan-offer documents must be immutable"
+                )
         self._validate_document(
             content=content,
             content_type=content_type,
         )
 
         checksum = self._checksum(content)
+        def matches_metadata(document: Document) -> bool:
+            return (
+                document.owner_type == owner_type
+                and document.owner_id == owner_id
+                and document.checksum == checksum
+                and document.document_type == document_type
+                and document.content_type == content_type
+                and document.is_immutable == immutable
+                and document.loan_offer_id == loan_offer_id
+                and document.loan_offer_version == loan_offer_version
+                and document.template_key == template_key
+                and document.template_version == template_version
+            )
 
         existing = await self.repository.get_by_checksum(
             owner_type=owner_type,
@@ -112,13 +156,25 @@ class DocumentService:
         )
 
         if existing is not None:
-            return existing
+            if matches_metadata(existing):
+                return existing
 
-        storage_key = (
-            f"{owner_type.lower()}/"
-            f"{owner_id}/"
-            f"{checksum}"
-        )
+            raise ValueError(
+                "Identical document content already exists with "
+                "different document metadata or provenance"
+            )
+
+        if has_provenance:
+            storage_key = (
+                f"loan-offers/{loan_offer_id}/"
+                f"v{loan_offer_version}/"
+                f"{template_key}/"
+                f"{template_version}/{checksum}"
+            )
+        else:
+            storage_key = (
+                f"{owner_type.lower()}/{owner_id}/{key_hint}/{checksum}"
+            )
 
         stored = await self.storage.put(
             content=content,
@@ -131,11 +187,15 @@ class DocumentService:
         )
 
         if existing_storage is not None:
-            if existing_storage.storage_ref != stored.storage_ref:
-                await self.storage.delete(stored.storage_ref)
+            if matches_metadata(existing_storage):
+                if existing_storage.storage_ref != stored.storage_ref:
+                    await self.storage.delete(stored.storage_ref)
+                return existing_storage
 
-            return existing_storage
-
+            raise ValueError(
+                "Storage reference already exists with different "
+                "document metadata or provenance"
+            )
         try:
             document = await self.repository.create(
                 document_type=document_type,
@@ -148,6 +208,10 @@ class DocumentService:
                 size_bytes=stored.size_bytes,
                 version=1,
                 is_immutable=immutable,
+                loan_offer_id=loan_offer_id,
+                loan_offer_version=loan_offer_version,
+                template_key=template_key,
+                template_version=template_version,
             )
         except IntegrityError:
             await self.session.rollback()
@@ -158,24 +222,31 @@ class DocumentService:
                 checksum=checksum,
             )
 
-            if existing is not None:
+            if existing is None:
+                existing = await self.repository.get_by_storage_ref(
+                    stored.storage_ref
+                )
+
+            if existing is not None and matches_metadata(existing):
                 if existing.storage_ref != stored.storage_ref:
                     await self.storage.delete(stored.storage_ref)
-
                 return existing
 
-            existing_storage = await self.repository.get_by_storage_ref(
-                stored.storage_ref
-            )
+            # Clean up this request's stored object when it is not
+            # referenced by the existing database record.
+            if (
+                existing is None
+                or existing.storage_ref != stored.storage_ref
+            ):
+                await self.storage.delete(stored.storage_ref)
 
-            if existing_storage is not None:
-                if (
-                    existing_storage.owner_type == owner_type
-                    and existing_storage.owner_id == owner_id
-                    and existing_storage.checksum == checksum
-                ):
-                    return existing_storage
+            if existing is not None:
+                raise ValueError(
+                    "Identical document content already exists with "
+                    "different document metadata or provenance"
+                )
 
+            # No duplicate was found; preserve the original DB error.
             raise
 
         return document
@@ -267,6 +338,10 @@ class DocumentService:
         if latest.is_immutable:
             raise ValueError(
                 "Immutable documents cannot be replaced"
+            )
+        if latest.loan_offer_id is not None:
+            raise ValueError(
+                "Loan-offer documents cannot be versioned by customers"
             )
 
         self._validate_document(

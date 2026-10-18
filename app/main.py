@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import sys
-
+from fastapi.middleware.cors import CORSMiddleware
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -24,6 +24,16 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Backend API for the InPockets digital lending platform.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.add_middleware(RequestIDMiddleware)

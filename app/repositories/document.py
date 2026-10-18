@@ -48,6 +48,10 @@ class DocumentRepository:
         size_bytes: int,
         version: int,
         is_immutable: bool,
+        loan_offer_id: uuid.UUID | None = None,
+        loan_offer_version: int | None = None,
+        template_key: str | None = None,
+        template_version: str | None = None,
     ) -> Document:
         document = Document(
             document_type=document_type,
@@ -60,6 +64,10 @@ class DocumentRepository:
             size_bytes=size_bytes,
             version=version,
             is_immutable=is_immutable,
+            loan_offer_id=loan_offer_id,
+            loan_offer_version=loan_offer_version,
+            template_key=template_key,
+            template_version=template_version,
         )
 
         self.session.add(document)

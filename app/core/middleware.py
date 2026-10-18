@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 
 from fastapi import Request
@@ -7,6 +8,10 @@ from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 
+# Client-supplied request IDs end up in logs and the audit table (String(100)),
+# so only accept a short, log-safe token; anything else is replaced.
+_SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(
@@ -14,10 +19,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next,
     ) -> Response:
-        request_id = request.headers.get(
-            "X-Request-ID",
-            str(uuid.uuid4()),
-        )
+        request_id = request.headers.get("X-Request-ID", "")
+        if not _SAFE_REQUEST_ID.match(request_id):
+            request_id = str(uuid.uuid4())
 
         request.state.request_id = request_id
 

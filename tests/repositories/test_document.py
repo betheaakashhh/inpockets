@@ -5,6 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
 from app.repositories.document import DocumentRepository
+from decimal import Decimal
+
+from app.models.loan_application import LoanApplication
+from app.repositories.loan_offer import LoanOfferRepository
 
 
 @pytest.mark.asyncio
@@ -286,3 +290,63 @@ async def test_get_by_id_for_update(db_session, user):
     assert locked_document is not None
     assert locked_document.id == document.id
     assert locked_document.is_immutable is True
+
+@pytest.mark.asyncio
+async def test_create_document_with_loan_offer_provenance(
+    db_session: AsyncSession,
+    user,
+):
+    application = LoanApplication(
+        application_number="INP-DOC-PROVENANCE-001",
+        user_id=user.id,
+        status="MANUAL_REVIEW",
+        requested_amount=Decimal("5000.00"),
+        requested_tenure_days=30,
+    )
+    db_session.add(application)
+    await db_session.flush()
+
+    offer_repository = LoanOfferRepository(db_session)
+    offer = await offer_repository.create(
+        loan_application_id=application.id,
+        user_id=user.id,
+        version=1,
+        principal_amount=Decimal("4500.00"),
+        tenure_days=30,
+        commercial_terms={
+            "annual_interest_rate": "18.00",
+            "processing_fee": "100.00",
+            "currency": "INR",
+        },
+    )
+
+    repository = DocumentRepository(db_session)
+    document = await repository.create(
+        document_type="KFS",
+        owner_type="USER",
+        owner_id=user.id,
+        document_family_id=uuid4(),
+        storage_ref="documents/loan-offer/kfs-v1",
+        checksum="b" * 64,
+        content_type="application/pdf",
+        size_bytes=2048,
+        version=1,
+        is_immutable=True,
+        loan_offer_id=offer.id,
+        loan_offer_version=offer.version,
+        template_key="loan_offer_kfs",
+        template_version="1.0.0",
+    )
+
+    assert document.loan_offer_id == offer.id
+    assert document.loan_offer_version == 1
+    assert document.template_key == "loan_offer_kfs"
+    assert document.template_version == "1.0.0"
+
+    fetched = await repository.get_by_id(document.id)
+
+    assert fetched is not None
+    assert fetched.loan_offer_id == offer.id
+    assert fetched.loan_offer_version == 1
+    assert fetched.template_key == "loan_offer_kfs"
+    assert fetched.template_version == "1.0.0"
