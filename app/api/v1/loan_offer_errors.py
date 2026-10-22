@@ -19,11 +19,7 @@ def to_http_error(exc: Exception) -> HTTPException:
 
 
 def client_ip(request) -> str | None:
-    """Return a valid IP for the audit INET column, else None."""
-    import ipaddress
+    """Return a valid IP for the audit INET column (proxy-aware), else None."""
+    from app.core.client_ip import get_client_ip
 
-    host = request.client.host if request.client else None
-    try:
-        return str(ipaddress.ip_address(host)) if host else None
-    except ValueError:
-        return None
+    return get_client_ip(request)

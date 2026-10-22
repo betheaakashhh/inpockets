@@ -6,12 +6,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import limit_ip
 from app.db.session import get_db_session
 from app.domain.esign import ESignNotFound, ESignUnavailable
 from app.providers.esign import ESignCallbackMalformed, ESignSignatureInvalid
 from app.services.esign_factory import build_esign_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(limit_ip("webhook-esign"))])
 
 MAX_BODY_BYTES = 25 * 1024 * 1024  # signed PDFs may ride in the callback
 

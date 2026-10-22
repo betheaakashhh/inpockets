@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.loan_offer_errors import client_ip, to_http_error
 from app.core.auth import get_current_user
+from app.core.rate_limit import limit_user
 from app.db.session import get_db_session
 from app.domain.loan_offer import LoanOfferStatus
 from app.models.user import User
@@ -14,7 +15,7 @@ from app.schemas.loan_offer import LoanOfferAcceptRequest, LoanOfferResponse
 from app.services.document import DocumentService
 from app.services.loan_offer_factory import build_loan_offer_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(limit_user("offers"))])
 
 
 def _request_id(request: Request) -> str | None:
@@ -135,7 +136,7 @@ async def download_agreement(
     )
 
 
-@router.post("/{offer_id}/accept", response_model=LoanOfferResponse)
+@router.post("/{offer_id}/accept", response_model=LoanOfferResponse, dependencies=[Depends(limit_user("offers-write", sensitive=True))])
 async def accept_offer(
     offer_id: uuid.UUID,
     payload: LoanOfferAcceptRequest,
@@ -167,7 +168,7 @@ async def accept_offer(
     return LoanOfferResponse.from_offer(offer)
 
 
-@router.post("/{offer_id}/decline", response_model=LoanOfferResponse)
+@router.post("/{offer_id}/decline", response_model=LoanOfferResponse, dependencies=[Depends(limit_user("offers-write", sensitive=True))])
 async def decline_offer(
     offer_id: uuid.UUID,
     request: Request,

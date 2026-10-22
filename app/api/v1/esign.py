@@ -7,13 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.loan_offer_errors import client_ip
 from app.core.auth import get_current_user
+from app.core.rate_limit import limit_user
 from app.db.session import get_db_session
 from app.domain.esign import ESignConflict, ESignNotFound, ESignUnavailable
 from app.models.user import User
 from app.schemas.esign import ESignResponse
 from app.services.esign_factory import build_esign_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(limit_user("esign"))])
 
 
 def _request_id(request: Request) -> str | None:
@@ -38,7 +39,7 @@ def esign_http_error(exc: Exception) -> HTTPException:
     raise exc
 
 
-@router.post("/{offer_id}/esign", response_model=ESignResponse)
+@router.post("/{offer_id}/esign", response_model=ESignResponse, dependencies=[Depends(limit_user("esign-write", sensitive=True))])
 async def initiate_esign(
     offer_id: uuid.UUID,
     request: Request,

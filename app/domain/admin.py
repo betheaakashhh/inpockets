@@ -35,8 +35,13 @@ class AdminPermission(StrEnum):
     LOAN_OVERRIDE = "LOAN_OVERRIDE"
     LOAN_OVERRIDE_APPROVE = "LOAN_OVERRIDE_APPROVE"
 
+    ESIGN_REVIEW = "ESIGN_REVIEW"
+    BANK_VERIFICATION_READ = "BANK_VERIFICATION_READ"
+    BANK_VERIFICATION_REVIEW = "BANK_VERIFICATION_REVIEW"
+
     DISBURSEMENT_READ = "DISBURSEMENT_READ"
     DISBURSEMENT_EXECUTE = "DISBURSEMENT_EXECUTE"
+    DISBURSEMENT_RETRY = "DISBURSEMENT_RETRY"
 
     COLLECTIONS_READ = "COLLECTIONS_READ"
     COLLECTIONS_UPDATE = "COLLECTIONS_UPDATE"
@@ -54,6 +59,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
 
     AdminRole.SENIOR_UNDERWRITER: frozenset(
         {
+            AdminPermission.BANK_VERIFICATION_READ,
+            AdminPermission.ESIGN_REVIEW,
             AdminPermission.CUSTOMER_READ,
             AdminPermission.LOAN_APPLICATION_READ,
             AdminPermission.LOAN_APPLICATION_REVIEW,
@@ -84,6 +91,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
 
     AdminRole.KYC_REVIEWER: frozenset(
         {
+            AdminPermission.BANK_VERIFICATION_READ,
+            AdminPermission.BANK_VERIFICATION_REVIEW,
             AdminPermission.CUSTOMER_READ,
             AdminPermission.LOAN_APPLICATION_READ,
             AdminPermission.KYC_REVIEW,
@@ -119,15 +128,19 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
 
     AdminRole.FINANCE: frozenset(
         {
+            AdminPermission.BANK_VERIFICATION_READ,
+            AdminPermission.BANK_VERIFICATION_REVIEW,
             AdminPermission.CUSTOMER_READ,
             AdminPermission.LOAN_APPLICATION_READ,
             AdminPermission.DISBURSEMENT_READ,
             AdminPermission.DISBURSEMENT_EXECUTE,
+            AdminPermission.DISBURSEMENT_RETRY,
         }
     ),
 
     AdminRole.AUDITOR: frozenset(
         {
+            AdminPermission.BANK_VERIFICATION_READ,
             AdminPermission.CUSTOMER_READ,
             AdminPermission.LOAN_APPLICATION_READ,
             AdminPermission.DISBURSEMENT_READ,

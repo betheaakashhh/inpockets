@@ -32,6 +32,8 @@ from app.models.underwriting_override import UnderwritingOverride
 from app.models.loan_offer import LoanOffer
 from app.models.esign_transaction import ESignTransaction
 from app.models.esign_event import ESignEvent
+from app.models.bank_account_verification import BankAccountVerification
+from app.models.disbursement import Disbursement, DisbursementEvent
 
 __all__ = [
     "User",
@@ -69,4 +71,7 @@ __all__ = [
     "LoanOffer",
     "ESignTransaction",
     "ESignEvent",
+    "BankAccountVerification",
+    "Disbursement",
+    "DisbursementEvent",
 ]

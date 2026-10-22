@@ -31,5 +31,6 @@ def build_esign_service(session: AsyncSession) -> ESignService:
         admin_authorization_service=AdminAuthorizationService(
             admin_user_repository=admin_users,
         ),
+        admin_user_repository=admin_users,
         settings=get_settings(),
     )

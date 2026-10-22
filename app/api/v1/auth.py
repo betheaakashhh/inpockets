@@ -1,7 +1,7 @@
-import ipaddress
 import uuid
 from datetime import datetime, timezone
 
+from app.core.client_ip import get_client_ip
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,14 +40,7 @@ router = APIRouter()
 
 
 def _client_ip(http_request: Request) -> str | None:
-    if http_request.client is None:
-        return None
-
-    try:
-        ipaddress.ip_address(http_request.client.host)
-        return http_request.client.host
-    except ValueError:
-        return None
+    return get_client_ip(http_request)
 
 
 @router.post("/request-otp", status_code=status.HTTP_200_OK)
