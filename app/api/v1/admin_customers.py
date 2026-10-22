@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from app.core.client_ip import get_client_ip
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,7 +74,7 @@ async def get_customer(
         customer_id=customer_id,
         admin_user_id=admin.id,
         request_id=getattr(request.state, "request_id", None),
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_client_ip(request),
     )
 
     if row is None:

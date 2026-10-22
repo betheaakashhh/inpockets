@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.loan_offer_errors import client_ip, to_http_error
 from app.core.admin import get_current_admin
+from app.core.rate_limit import limit_user
 from app.db.session import get_db_session
 from app.models.admin_user import AdminUser
 from app.schemas.loan_offer import (
@@ -20,7 +21,7 @@ from app.services.loan_offer_factory import (
     build_loan_offer_service,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(limit_user("admin-offers"))])
 
 
 def _request_id(request: Request) -> str | None:
@@ -31,6 +32,7 @@ def _request_id(request: Request) -> str | None:
     "",
     response_model=AdminLoanOfferResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_user("admin-offers-write", sensitive=True))],
 )
 async def create_draft_offer(
     payload: LoanOfferDraftCreateRequest,
@@ -90,7 +92,7 @@ async def get_offer(
     return AdminLoanOfferResponse.from_offer(offer)
 
 
-@router.post("/{offer_id}/issue", response_model=AdminLoanOfferResponse)
+@router.post("/{offer_id}/issue", response_model=AdminLoanOfferResponse, dependencies=[Depends(limit_user("admin-offers-write", sensitive=True))])
 async def issue_offer(
     offer_id: uuid.UUID,
     request: Request,
@@ -116,7 +118,7 @@ async def issue_offer(
         raise to_http_error(exc) from exc
 
 
-@router.post("/{offer_id}/cancel", response_model=AdminLoanOfferResponse)
+@router.post("/{offer_id}/cancel", response_model=AdminLoanOfferResponse, dependencies=[Depends(limit_user("admin-offers-write", sensitive=True))])
 async def cancel_offer(
     offer_id: uuid.UUID,
     payload: LoanOfferCancelRequest,

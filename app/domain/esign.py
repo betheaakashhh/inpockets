@@ -33,7 +33,9 @@ ESIGN_TRANSITIONS: dict[ESignStatus, frozenset[ESignStatus]] = {
     # automatically; it goes to a human.
     ESignStatus.EXPIRED: frozenset({ESignStatus.MANUAL_REVIEW}),
     ESignStatus.FAILED: frozenset({ESignStatus.MANUAL_REVIEW}),
-    ESignStatus.MANUAL_REVIEW: frozenset(),  # resolved by an admin workflow
+    # Only the permissioned admin workflow leaves review, and SIGNED is only
+    # reachable when the provider itself confirms it (see ESignService.resolve_review).
+    ESignStatus.MANUAL_REVIEW: frozenset({ESignStatus.SIGNED, ESignStatus.FAILED}),
     ESignStatus.SIGNED: frozenset(),  # final
 }
 

@@ -6,6 +6,8 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
@@ -65,6 +67,25 @@ async def app_exception_handler(
             }
         },
     )
+
+
+# Paths whose request bodies contain sensitive data. FastAPI's default 422
+# body echoes the rejected input back; for these routes it must not.
+_SENSITIVE_INPUT_PREFIXES = ("/api/v1/bank-verifications",)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    if request.url.path.startswith(_SENSITIVE_INPUT_PREFIXES):
+        safe = [
+            {"loc": list(e.get("loc", ())), "msg": e.get("msg"), "type": e.get("type")}
+            for e in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": safe})
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.exception_handler(Exception)

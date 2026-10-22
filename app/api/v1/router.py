@@ -19,6 +19,13 @@ from app.api.v1.esign import router as esign_router
 from app.api.v1.admin_esign import router as admin_esign_router
 from app.api.v1.webhooks_esign import router as webhooks_esign_router
 
+from app.api.v1.bank_verification import router as bank_verification_router
+from app.api.v1.admin_bank_verification import router as admin_bank_verification_router
+
+from app.api.v1.disbursement import router as disbursement_router
+from app.api.v1.admin_disbursement import router as admin_disbursement_router
+from app.api.v1.webhooks_disbursement import router as webhooks_disbursement_router
+
 api_router = APIRouter()
 
 api_router.include_router(
@@ -105,6 +112,36 @@ api_router.include_router(
 
 api_router.include_router(
     webhooks_esign_router,
+    prefix="/webhooks",
+    tags=["Webhooks"],
+)
+
+api_router.include_router(
+    bank_verification_router,
+    prefix="/bank-verifications",
+    tags=["Bank Verification"],
+)
+
+api_router.include_router(
+    admin_bank_verification_router,
+    prefix="/admin/bank-verifications",
+    tags=["Admin Bank Verification"],
+)
+
+api_router.include_router(
+    disbursement_router,
+    prefix="/loan-offers",
+    tags=["Disbursement"],
+)
+
+api_router.include_router(
+    admin_disbursement_router,
+    prefix="/admin/disbursements",
+    tags=["Admin Disbursement"],
+)
+
+api_router.include_router(
+    webhooks_disbursement_router,
     prefix="/webhooks",
     tags=["Webhooks"],
 )

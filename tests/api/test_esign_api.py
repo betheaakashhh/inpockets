@@ -600,3 +600,136 @@ async def test_binding_fields_cannot_change_while_pending(world, db_session):
         with pytest.raises(DBAPIError):
             await db_session.execute(text(statement), {"id": tx_id})
         await db_session.rollback()
+
+
+# ------------------------------------------------------ manual review workflow
+
+
+async def review_tx(world, db_session):
+    """A transaction in MANUAL_REVIEW (signed callback without any artifact)."""
+    offer, tx = await pending_tx(world, db_session)
+    body, headers = callback(tx.provider_ref, "SIGNED", tx.document_checksum, signed=None)
+    assert post_callback(body, headers).json()["outcome"] == "SIGNED_ARTIFACT_UNAVAILABLE"
+    return offer, await load_tx(db_session, offer["id"])
+
+
+def resolve_review(headers, offer_id, decision, reason="Checked with the provider dashboard"):
+    return client.post(
+        f"/api/v1/admin/loan-offers/{offer_id}/esign/resolve",
+        json={"decision": decision, "reason": reason},
+        headers=headers,
+    )
+
+
+async def test_review_queue_lists_transactions_for_authorised_admins(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    queue = client.get("/api/v1/admin/loan-offers/esign/review-queue", headers=world.admin_headers)
+    assert queue.status_code == 200
+    assert [row["id"] for row in queue.json()] == [str(tx.id)]
+    assert queue.json()[0]["status"] == "MANUAL_REVIEW"
+
+
+async def test_recheck_completes_signing_when_provider_confirms(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    provider_tx = DevelopmentESignProvider.transactions[tx.provider_ref]
+    provider_tx.update(status="SIGNED", signed=SIGNED_PDF)
+
+    response = resolve_review(world.admin_headers, offer["id"], "RECHECK")
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "SIGNED"
+    tx = await load_tx(db_session, offer["id"])
+    assert tx.status == "SIGNED" and tx.signed_document_id is not None
+    assert tx.reviewed_by_admin_user_id is not None and tx.resolution_reason
+    stored = await DocumentService(db_session).storage.get(
+        (await db_session.get(Document, tx.signed_document_id)).storage_ref
+    )
+    assert stored.content == SIGNED_PDF
+    log = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.action == "ESIGN_REVIEW_RESOLVED")
+        )
+    ).scalar_one()
+    assert log.old_value["status"] == "MANUAL_REVIEW" and log.new_value["status"] == "SIGNED"
+    assert log.reason
+
+
+async def test_recheck_never_signs_on_an_admins_word(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    # Provider still pending: no state change, whatever the admin wants.
+    assert resolve_review(world.admin_headers, offer["id"], "RECHECK").status_code == 409
+    assert (await load_tx(db_session, offer["id"])).status == "MANUAL_REVIEW"
+    # Provider reports a different document.
+    provider_tx = DevelopmentESignProvider.transactions[tx.provider_ref]
+    provider_tx.update(status="SIGNED", document_checksum="e" * 64, signed=SIGNED_PDF)
+    assert resolve_review(world.admin_headers, offer["id"], "RECHECK").status_code == 409
+    assert (await load_tx(db_session, offer["id"])).status == "MANUAL_REVIEW"
+    # Provider confirms but no artifact obtainable while one is required.
+    provider_tx.update(document_checksum=tx.document_checksum, signed=None)
+    assert resolve_review(world.admin_headers, offer["id"], "RECHECK").status_code == 409
+    assert (await load_tx(db_session, offer["id"])).status == "MANUAL_REVIEW"
+
+
+async def test_recheck_fails_transaction_when_provider_says_failed(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    DevelopmentESignProvider.transactions[tx.provider_ref]["status"] = "FAILED"
+    assert resolve_review(world.admin_headers, offer["id"], "RECHECK").json()["status"] == "FAILED"
+    # Customer can start a fresh attempt afterwards.
+    assert start(offer["id"], world.customer_headers).json()["status"] == "PENDING"
+
+
+async def test_failing_a_review_is_refused_if_provider_confirms_signature(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    DevelopmentESignProvider.transactions[tx.provider_ref].update(
+        status="SIGNED", signed=SIGNED_PDF
+    )
+    assert resolve_review(world.admin_headers, offer["id"], "FAILED").status_code == 409
+    assert (await load_tx(db_session, offer["id"])).status == "MANUAL_REVIEW"
+
+
+async def test_failing_a_review_allows_a_retry(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    response = resolve_review(world.admin_headers, offer["id"], "FAILED")
+    assert response.status_code == 200 and response.json()["status"] == "FAILED"
+    assert response.json()["resolution_reason"]
+    assert start(offer["id"], world.customer_headers).json()["status"] == "PENDING"
+
+
+async def test_review_resolution_is_permission_controlled(world, db_session, monkeypatch):
+    offer, tx = await review_tx(world, db_session)
+    for role in ("FINANCE", "KYC_REVIEWER", "AUDITOR", "CUSTOMER_SUPPORT"):
+        _, headers = await make_actor(monkeypatch, db_session, role=role)
+        assert resolve_review(headers, offer["id"], "FAILED").status_code == 403
+        assert client.get(
+            "/api/v1/admin/loan-offers/esign/review-queue", headers=headers
+        ).status_code == 403
+    assert resolve_review(world.customer_headers, offer["id"], "FAILED").status_code in (401, 403)
+    assert (await load_tx(db_session, offer["id"])).status == "MANUAL_REVIEW"
+
+
+async def test_review_resolution_validation_and_state_rules(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    assert resolve_review(world.admin_headers, offer["id"], "SIGNED").status_code == 409
+    assert resolve_review(world.admin_headers, offer["id"], "FAILED", "short").status_code == 409
+    assert resolve_review(world.admin_headers, offer["id"], "FAILED").status_code == 200
+    # Already resolved: nothing awaiting review any more.
+    assert resolve_review(world.admin_headers, offer["id"], "FAILED").status_code == 409
+
+
+async def test_provider_outage_blocks_review_resolution(world, db_session):
+    offer, tx = await review_tx(world, db_session)
+    DevelopmentESignProvider.behaviour = "timeout"
+    assert resolve_review(world.admin_headers, offer["id"], "FAILED").status_code == 503
+    assert (await load_tx(db_session, offer["id"])).status == "MANUAL_REVIEW"
+
+
+async def test_admin_cannot_review_their_own_signing(world, db_session):
+    from app.models.admin_user import AdminUser
+
+    customer_id = world.customer.id
+    offer, tx = await review_tx(world, db_session)
+    # The customer is also an admin with review rights (a conflict of interest).
+    db_session.add(AdminUser(user_id=customer_id, role="SENIOR_UNDERWRITER", is_active=True))
+    await db_session.commit()
+    response = resolve_review(world.customer_headers, offer["id"], "FAILED")
+    assert response.status_code == 403
+    assert (await load_tx(db_session, offer["id"])).status == "MANUAL_REVIEW"

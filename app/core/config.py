@@ -43,6 +43,41 @@ class Settings(BaseSettings):
     # When true, a SIGNED callback without a retrievable signed artifact goes
     # to manual review instead of being trusted.
     esign_require_signed_artifact: bool = True
+    # Field-level encryption keyring: "kid:base64(32 bytes),kid2:..." from the
+    # secrets manager. Sensitive fields are encrypted with the active key and
+    # decrypted with any listed key (rotation). Unset => encryption refuses.
+    field_encryption_keys: str | None = None
+    field_encryption_active_key_id: str | None = None
+    # Separate HMAC key for searchable account fingerprints (base64, >=32 bytes).
+    bank_fingerprint_key: str | None = None
+    bank_verification_provider: str = "development"
+    bank_verification_provider_timeout_seconds: float = 10.0
+    # Verification attempts allowed per user per 24h.
+    bank_verification_max_attempts_per_day: int = 5
+    # A verification still unresolved after this long goes to manual review.
+    bank_verification_pending_timeout_hours: int = 24
+    # Reverse-proxy trust. 0 = never read X-Forwarded-For (use the socket
+    # peer). N>0 = the app sits behind N trusted proxies and takes the Nth
+    # address from the right of X-Forwarded-For. If trusted_proxy_cidrs is
+    # set, the header is only honoured when the socket peer is inside them.
+    trusted_proxy_count: int = 0
+    trusted_proxy_cidrs: str | None = None
+    # Redis fixed-window rate limits (per minute). Fails open if Redis is down.
+    rate_limit_enabled: bool = True
+    rate_limit_user_per_minute: int = 120
+    rate_limit_sensitive_per_minute: int = 20
+    rate_limit_webhook_per_minute: int = 600
+    disbursement_provider: str = "development"
+    # Shared secret for verifying signed disbursement webhooks. Unset means
+    # every webhook is rejected.
+    disbursement_webhook_secret: str | None = None
+    disbursement_callback_tolerance_seconds: int = 300
+    disbursement_provider_timeout_seconds: float = 15.0
+    # A PROCESSING disbursement is polled once it is this old (or has no
+    # provider reference yet).
+    disbursement_reconcile_grace_minutes: int = 10
+    # Still unresolved after this long => REQUIRES_REVIEW (a human decides).
+    disbursement_max_unresolved_hours: int = 24
     dev_kyc_result: str = "PENDING"
     dev_identity_result: str = "PROCESSING"
     # Default offer validity window. Lender/credit policy owns the real value.

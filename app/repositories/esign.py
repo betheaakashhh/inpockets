@@ -110,3 +110,12 @@ class ESignRepository:
                 .where(ESignTransaction.loan_offer_id == offer_id)
             )
         ).scalar_one()
+
+    async def list_by_status(self, status: str, *, limit: int) -> list[ESignTransaction]:
+        rows = await self.session.execute(
+            select(ESignTransaction)
+            .where(ESignTransaction.status == status)
+            .order_by(ESignTransaction.updated_at)
+            .limit(limit)
+        )
+        return list(rows.scalars())

@@ -22,6 +22,10 @@ services:
       DOCUMENT_STORAGE_PROVIDER: ${DOCUMENT_STORAGE_PROVIDER:-development}
       DOCUMENT_STORAGE_PATH: ${DOCUMENT_STORAGE_PATH:-.data/documents}
       IDENTITY_VERIFICATION_PROVIDER: ${IDENTITY_VERIFICATION_PROVIDER:-development}
+      DISBURSEMENT_PROVIDER: ${DISBURSEMENT_PROVIDER:-development}
+      DISBURSEMENT_WEBHOOK_SECRET: ${DISBURSEMENT_WEBHOOK_SECRET:-}
+      FIELD_ENCRYPTION_KEYS: ${FIELD_ENCRYPTION_KEYS:-}
+      FIELD_ENCRYPTION_ACTIVE_KEY_ID: ${FIELD_ENCRYPTION_ACTIVE_KEY_ID:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -30,6 +34,30 @@ services:
       redis:
         condition: service_healthy
       
+  disbursement-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inpockets-disbursement-worker
+    restart: unless-stopped
+    volumes:
+      - ./app:/app/app
+    command: python -m app.workers.disbursement --interval 15
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/inpockets
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:-change-me-otp-secret}
+      DISBURSEMENT_PROVIDER: ${DISBURSEMENT_PROVIDER:-development}
+      DISBURSEMENT_WEBHOOK_SECRET: ${DISBURSEMENT_WEBHOOK_SECRET:-}
+      FIELD_ENCRYPTION_KEYS: ${FIELD_ENCRYPTION_KEYS:-}
+      FIELD_ENCRYPTION_ACTIVE_KEY_ID: ${FIELD_ENCRYPTION_ACTIVE_KEY_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   postgres:
     image: postgres:17
     container_name: inpockets-postgres

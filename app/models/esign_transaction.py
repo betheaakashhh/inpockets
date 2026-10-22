@@ -38,6 +38,10 @@ class ESignTransaction(Base):
             "(status = 'SIGNED') = (signed_at IS NOT NULL)",
             name="ck_esign_signed_at_iff_signed",
         ),
+        CheckConstraint(
+            "(reviewed_by_admin_user_id IS NULL) = (reviewed_at IS NULL)",
+            name="ck_esign_review_pair",
+        ),
         CheckConstraint("loan_offer_version >= 1", name="ck_esign_offer_version"),
         CheckConstraint("length(document_checksum) = 64", name="ck_esign_checksum_len"),
         Index("ix_esign_user_status", "user_id", "status"),
@@ -87,6 +91,13 @@ class ESignTransaction(Base):
     )
     signed_checksum: Mapped[str | None] = mapped_column(String(64))
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Manual-review resolution (admin workflow).
+    reviewed_by_admin_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("admin_users.id", ondelete="RESTRICT")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolution_reason: Mapped[str | None] = mapped_column(String(500))
 
     initiated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

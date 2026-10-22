@@ -48,7 +48,7 @@ async def clean_database() -> None:
         # documents <-> loan_offers reference each other (RESTRICT) and issued
         # offers are immutable by trigger, so neither side can be deleted or
         # nulled row-by-row. TRUNCATE clears both together (test DB only).
-        await session.execute(text("TRUNCATE esign_events, esign_transactions, loan_offers, documents CASCADE"))
+        await session.execute(text("TRUNCATE disbursement_events, disbursements, bank_account_verifications, esign_events, esign_transactions, loan_offers, documents CASCADE"))
         await session.execute(delete(UserSession))
         await session.execute(delete(OTPVerification))
         # audit_logs is append-only by trigger (and its admin FK is SET NULL,
@@ -76,6 +76,9 @@ async def clean_redis() -> None:
         keys = []
 
         async for key in redis_client.scan_iter(match="otp:request:*"):
+            keys.append(key)
+
+        async for key in redis_client.scan_iter(match="ratelimit:*"):
             keys.append(key)
 
         if keys:

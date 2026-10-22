@@ -53,6 +53,9 @@ class AdminESignResponse(BaseModel):
     signed_document_id: uuid.UUID | None
     signed_checksum: str | None
     signed_at: datetime | None
+    resolution_reason: str | None = None
+    reviewed_by_admin_user_id: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
     expires_at: datetime
     events: list[ESignEventResponse]
 
@@ -72,6 +75,9 @@ class AdminESignResponse(BaseModel):
             signed_document_id=tx.signed_document_id,
             signed_checksum=tx.signed_checksum,
             signed_at=tx.signed_at,
+            resolution_reason=tx.resolution_reason,
+            reviewed_by_admin_user_id=tx.reviewed_by_admin_user_id,
+            reviewed_at=tx.reviewed_at,
             expires_at=tx.expires_at,
             events=[
                 ESignEventResponse(
@@ -83,3 +89,8 @@ class AdminESignResponse(BaseModel):
                 for e in events
             ],
         )
+
+
+class ESignReviewResolveRequest(BaseModel):
+    decision: str
+    reason: str

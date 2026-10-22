@@ -46,6 +46,7 @@ class ESignService:
         provider: ESignProvider,
         audit_log_service,
         admin_authorization_service,
+        admin_user_repository,
         settings: Settings,
     ):
         self.session = session
@@ -56,6 +57,7 @@ class ESignService:
         self.provider = provider
         self.audit = audit_log_service
         self.admin_authz = admin_authorization_service
+        self.admin_user_repository = admin_user_repository
         self.settings = settings
 
     # ------------------------------------------------------------ helpers
@@ -414,6 +416,109 @@ class ESignService:
             meta={"signed_document_id": str(tx.signed_document_id)},
         )
         return "SIGNED"
+
+    # ------------------------------------------------------ manual review
+
+    async def list_review_queue(self, *, actor_user_id, limit: int = 100):
+        await self.admin_authz.require_permission(
+            user_id=actor_user_id, permission=AdminPermission.ESIGN_REVIEW
+        )
+        return await self.repository.list_by_status(
+            ESignStatus.MANUAL_REVIEW.value, limit=limit
+        )
+
+    async def resolve_review(
+        self,
+        *,
+        actor_user_id,
+        offer_id,
+        decision: str,
+        reason: str,
+        request_id=None,
+        ip_address=None,
+    ) -> ESignTransaction:
+        """Resolve a MANUAL_REVIEW transaction.
+
+        An admin never declares a signature: RECHECK asks the provider and
+        only a provider-confirmed SIGNED for the exact document completes it.
+        FAILED is refused while the provider still reports a valid signature.
+        """
+        await self.admin_authz.require_permission(
+            user_id=actor_user_id, permission=AdminPermission.ESIGN_REVIEW
+        )
+        if decision not in ("RECHECK", "FAILED"):
+            raise ESignConflict("Decision must be RECHECK or FAILED")
+        reason = (reason or "").strip()
+        if len(reason) < 10:
+            raise ESignConflict("A reason of at least 10 characters is required")
+
+        offer = await self.offer_repository.get_by_id_for_update(offer_id=offer_id)
+        if offer is None:
+            raise ESignNotFound("Loan offer not found")
+        tx = await self.repository.get_live_for_offer(offer.id, for_update=True)
+        if tx is None or ESignStatus(tx.status) != ESignStatus.MANUAL_REVIEW:
+            raise ESignConflict("No e-sign transaction is awaiting review for this offer")
+        if tx.user_id == actor_user_id:
+            raise PermissionError("Admins cannot review their own e-sign transaction")
+
+        admin = await self.admin_user_repository.get_by_user_id(actor_user_id)
+        old = {"status": tx.status, "failure_reason": tx.failure_reason}
+        # Stamp the reviewer first: a SIGNED row is immutable in the database,
+        # so these fields must be part of the same write that finalises it.
+        tx.reviewed_by_admin_user_id = admin.id
+        tx.reviewed_at = offer_domain.utcnow()
+        tx.resolution_reason = reason[:500]
+
+        report = None
+        if tx.provider_ref:
+            try:
+                report = await self._call(
+                    self.provider.get_status(provider_ref=tx.provider_ref)
+                )
+            except (ESignProviderTimeout, ESignProviderRejected) as exc:
+                raise ESignUnavailable("Provider could not be reached to verify") from exc
+        confirms_signed = (
+            report is not None
+            and report.status == "SIGNED"
+            and report.document_checksum == tx.document_checksum
+        )
+
+        if decision == "RECHECK":
+            if report is None:
+                raise ESignConflict("No provider reference; this can only be failed")
+            if report.status == "PENDING":
+                raise ESignConflict("Provider still reports the signature as pending")
+            if report.status == "SIGNED" and not confirms_signed:
+                raise ESignConflict("Provider reports a different document; cannot approve")
+            if confirms_signed:
+                outcome = await self._complete_signing(
+                    tx, None, None, offer_domain.utcnow()
+                )
+                if outcome != "SIGNED":
+                    raise ESignConflict(f"Cannot complete signing: {outcome}")
+            else:  # provider says FAILED / EXPIRED
+                self._move(tx, ESignStatus.FAILED, report.failure_reason or report.status)
+        else:  # FAILED
+            if confirms_signed:
+                raise ESignConflict(
+                    "Provider confirms this document was signed; use RECHECK instead"
+                )
+            self._move(tx, ESignStatus.FAILED, "REVIEW_REJECTED")
+
+        await self.session.flush()
+        await self.audit.record_admin_action(
+            actor_user_id=actor_user_id,
+            action="ESIGN_REVIEW_RESOLVED",
+            entity_type="esign_transaction",
+            entity_id=str(tx.id),
+            request_id=request_id,
+            ip_address=ip_address,
+            reason=reason,
+            old_value=old,
+            new_value={"status": tx.status},
+            event_metadata={"decision": decision, "loan_offer_id": str(tx.loan_offer_id)},
+        )
+        return tx
 
     # --------------------------------------------------------- reconcile
 

@@ -71,3 +71,44 @@ def get_esign_provider() -> ESignProvider:
         )
 
     raise RuntimeError(f"Unsupported e-sign provider: {provider}")
+
+
+from app.providers.bank_verification import BankAccountVerificationProvider
+
+
+def get_bank_verification_provider() -> BankAccountVerificationProvider:
+    settings = get_settings()
+    provider = settings.bank_verification_provider.lower()
+
+    if provider == "development":
+        if settings.environment.lower() == "production":
+            raise RuntimeError(
+                "Development bank verification provider is not allowed in production"
+            )
+        from app.providers.bank_verification_development import (
+            DevelopmentBankVerificationProvider,
+        )
+
+        return DevelopmentBankVerificationProvider()
+
+    raise RuntimeError(f"Unsupported bank verification provider: {provider}")
+
+
+from app.providers.disbursement import DisbursementProvider
+
+
+def get_disbursement_provider() -> DisbursementProvider:
+    settings = get_settings()
+    provider = settings.disbursement_provider.lower()
+
+    if provider == "development":
+        if settings.environment.lower() == "production":
+            raise RuntimeError("Development disbursement provider is not allowed in production")
+        from app.providers.disbursement_development import DevelopmentDisbursementProvider
+
+        return DevelopmentDisbursementProvider(
+            webhook_secret=settings.disbursement_webhook_secret,
+            tolerance_seconds=settings.disbursement_callback_tolerance_seconds,
+        )
+
+    raise RuntimeError(f"Unsupported disbursement provider: {provider}")
