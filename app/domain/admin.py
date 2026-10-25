@@ -43,6 +43,12 @@ class AdminPermission(StrEnum):
     DISBURSEMENT_EXECUTE = "DISBURSEMENT_EXECUTE"
     DISBURSEMENT_RETRY = "DISBURSEMENT_RETRY"
 
+    LEDGER_READ = "LEDGER_READ"
+
+    REPAYMENT_READ = "REPAYMENT_READ"
+    REPAYMENT_SCHEDULE_MANAGE = "REPAYMENT_SCHEDULE_MANAGE"
+    REPAYMENT_REVIEW = "REPAYMENT_REVIEW"
+
     COLLECTIONS_READ = "COLLECTIONS_READ"
     COLLECTIONS_UPDATE = "COLLECTIONS_UPDATE"
 
@@ -135,6 +141,10 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.DISBURSEMENT_READ,
             AdminPermission.DISBURSEMENT_EXECUTE,
             AdminPermission.DISBURSEMENT_RETRY,
+            AdminPermission.LEDGER_READ,
+            AdminPermission.REPAYMENT_READ,
+            AdminPermission.REPAYMENT_SCHEDULE_MANAGE,
+            AdminPermission.REPAYMENT_REVIEW,
         }
     ),
 
@@ -144,6 +154,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.CUSTOMER_READ,
             AdminPermission.LOAN_APPLICATION_READ,
             AdminPermission.DISBURSEMENT_READ,
+            AdminPermission.LEDGER_READ,
+            AdminPermission.REPAYMENT_READ,
             AdminPermission.AUDIT_READ,
         }
     ),

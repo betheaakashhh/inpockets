@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     disbursement_reconcile_grace_minutes: int = 10
     # Still unresolved after this long => REQUIRES_REVIEW (a human decides).
     disbursement_max_unresolved_hours: int = 24
+    payment_provider: str = "development"
+    payment_webhook_secret: str | None = None
+    payment_callback_tolerance_seconds: int = 300
+    payment_provider_timeout_seconds: float = 15.0
+    payment_reconcile_grace_minutes: int = 10
+    payment_max_unresolved_hours: int = 24
+    # Interest and fee income may only be posted to the ledger once the
+    # lender/accounting rules are approved. While False, a schedule that
+    # contains interest or fees cannot be created.
+    ledger_interest_fee_posting_enabled: bool = False
     dev_kyc_result: str = "PENDING"
     dev_identity_result: str = "PROCESSING"
     # Default offer validity window. Lender/credit policy owns the real value.

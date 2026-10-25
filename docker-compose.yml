@@ -26,6 +26,9 @@ services:
       DISBURSEMENT_WEBHOOK_SECRET: ${DISBURSEMENT_WEBHOOK_SECRET:-}
       FIELD_ENCRYPTION_KEYS: ${FIELD_ENCRYPTION_KEYS:-}
       FIELD_ENCRYPTION_ACTIVE_KEY_ID: ${FIELD_ENCRYPTION_ACTIVE_KEY_ID:-}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-development}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      LEDGER_INTEREST_FEE_POSTING_ENABLED: ${LEDGER_INTEREST_FEE_POSTING_ENABLED:-false}
     ports:
       - "8000:8000"
     depends_on:
@@ -52,6 +55,29 @@ services:
       DISBURSEMENT_WEBHOOK_SECRET: ${DISBURSEMENT_WEBHOOK_SECRET:-}
       FIELD_ENCRYPTION_KEYS: ${FIELD_ENCRYPTION_KEYS:-}
       FIELD_ENCRYPTION_ACTIVE_KEY_ID: ${FIELD_ENCRYPTION_ACTIVE_KEY_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  repayment-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inpockets-repayment-worker
+    restart: unless-stopped
+    volumes:
+      - ./app:/app/app
+    command: python -m app.workers.repayment --interval 15
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/inpockets
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:-change-me-otp-secret}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-development}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      LEDGER_INTEREST_FEE_POSTING_ENABLED: ${LEDGER_INTEREST_FEE_POSTING_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
