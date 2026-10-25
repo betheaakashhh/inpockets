@@ -15,7 +15,8 @@ class ScheduleCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     loan_offer_id: uuid.UUID
-    installment_count: int = Field(default=1, ge=1, le=dom.MAX_INSTALLMENTS)
+    # None: one instalment for an unpriced loan; the offer's own count for a priced one.
+    installment_count: int | None = Field(default=None, ge=1, le=dom.MAX_INSTALLMENTS)
     interval_days: int | None = Field(default=None, ge=1, le=dom.MAX_INTERVAL_DAYS)
 
 
@@ -81,16 +82,20 @@ class ScheduleResponse(BaseModel):
         paid = sum(
             (i.principal_paid + i.interest_paid + i.fee_paid for i in installments), Decimal(0)
         )
+        # Late charges raise an installment's fee_due after the schedule was
+        # made, so what is owed is read from the installments, not the header.
+        fee_total = sum((i.fee_due for i in installments), Decimal(0))
+        total_payable = schedule.principal_total + schedule.interest_total + fee_total
         return cls(
             id=schedule.id,
             loan_offer_id=schedule.loan_offer_id,
             status=schedule.status,
             principal_total=schedule.principal_total,
             interest_total=schedule.interest_total,
-            fee_total=schedule.fee_total,
-            total_payable=schedule.total_payable,
+            fee_total=fee_total,
+            total_payable=total_payable,
             total_paid=paid,
-            total_remaining=schedule.total_payable - paid,
+            total_remaining=total_payable - paid,
             installment_count=schedule.installment_count,
             interval_days=schedule.interval_days,
             first_due_date=schedule.first_due_date,

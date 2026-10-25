@@ -49,6 +49,10 @@ class AdminPermission(StrEnum):
     REPAYMENT_SCHEDULE_MANAGE = "REPAYMENT_SCHEDULE_MANAGE"
     REPAYMENT_REVIEW = "REPAYMENT_REVIEW"
 
+    PRICING_READ = "PRICING_READ"
+    PRICING_MANAGE = "PRICING_MANAGE"
+    PRICING_APPROVE = "PRICING_APPROVE"
+
     COLLECTIONS_READ = "COLLECTIONS_READ"
     COLLECTIONS_UPDATE = "COLLECTIONS_UPDATE"
 
@@ -145,6 +149,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.REPAYMENT_READ,
             AdminPermission.REPAYMENT_SCHEDULE_MANAGE,
             AdminPermission.REPAYMENT_REVIEW,
+            AdminPermission.PRICING_READ,
+            AdminPermission.PRICING_MANAGE,
         }
     ),
 
@@ -156,6 +162,7 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.DISBURSEMENT_READ,
             AdminPermission.LEDGER_READ,
             AdminPermission.REPAYMENT_READ,
+            AdminPermission.PRICING_READ,
             AdminPermission.AUDIT_READ,
         }
     ),

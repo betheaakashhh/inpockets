@@ -69,6 +69,8 @@ LOAN_PRINCIPAL = "LOAN_PRINCIPAL_RECEIVABLE"
 UNAPPLIED_RECEIPTS = "UNAPPLIED_RECEIPTS"
 INTEREST_INCOME = "INTEREST_INCOME"
 FEE_INCOME = "FEE_INCOME"
+GST_PAYABLE = "GST_PAYABLE"
+PENAL_INCOME = "PENAL_INCOME"
 
 SYSTEM_ACCOUNTS: dict[str, tuple[str, AccountType]] = {
     BANK: ("Bank / settlement clearing", AccountType.ASSET),
@@ -76,6 +78,8 @@ SYSTEM_ACCOUNTS: dict[str, tuple[str, AccountType]] = {
     UNAPPLIED_RECEIPTS: ("Customer receipts not yet applied", AccountType.LIABILITY),
     INTEREST_INCOME: ("Interest income", AccountType.INCOME),
     FEE_INCOME: ("Fee income", AccountType.INCOME),
+    GST_PAYABLE: ("GST collected, payable to the government", AccountType.LIABILITY),
+    PENAL_INCOME: ("Late and bounce charges income", AccountType.INCOME),
 }
 
 

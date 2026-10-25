@@ -5,7 +5,9 @@ Safe to run on several instances at once. Each pass:
      (a crash or timeout after we recorded them) are sent again. The provider
      dedupes on the payment's idempotency key, so this cannot double-collect;
   2. reconcile: PENDING payments with no answer after a grace period are
-     looked up at the provider. The provider's answer, not ours, decides.
+     looked up at the provider. The provider's answer, not ours, decides;
+  3. late charges: overdue installments of loans whose offer switched late
+     charges on are charged for any day not yet charged (idempotent).
 
 Run:  python -m app.workers.repayment           (loop)
       python -m app.workers.repayment --once    (single pass)
@@ -21,13 +23,14 @@ import sys
 
 from app.core.logging import configure_logging
 from app.db.session import AsyncSessionLocal
+from app.services.late_charges_factory import build_late_charge_service
 from app.services.repayment_factory import build_repayment_service
 
 logger = logging.getLogger(__name__)
 
 
 async def run_once(*, session_factory=AsyncSessionLocal, batch_size: int = 50) -> dict[str, int]:
-    stats = {"dispatched": 0, "reconciled": 0, "errors": 0}
+    stats = {"dispatched": 0, "reconciled": 0, "late_charged": 0, "errors": 0}
 
     async with session_factory() as session:
         undispatched = await build_repayment_service(session).undispatched_candidates(
@@ -54,6 +57,18 @@ async def run_once(*, session_factory=AsyncSessionLocal, batch_size: int = 50) -
         except Exception:
             stats["errors"] += 1
             logger.exception("repayment reconcile failed id=%s", payment_id)
+
+    async with session_factory() as session:
+        overdue = await build_late_charge_service(session).candidates(limit=batch_size * 4)
+    for schedule_id in overdue:
+        try:
+            async with session_factory() as session:
+                result = await build_late_charge_service(session).assess_schedule(schedule_id)
+                await session.commit()
+            stats["late_charged"] += result.charges
+        except Exception:
+            stats["errors"] += 1
+            logger.exception("late charge assessment failed id=%s", schedule_id)
 
     logger.info("repayment worker pass: %s", stats)
     return stats

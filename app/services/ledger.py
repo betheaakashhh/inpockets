@@ -35,9 +35,12 @@ class LedgerService:
     success), so the books and the operational record can never disagree.
     """
 
-    def __init__(self, *, session, repository, admin_authorization_service=None):
+    def __init__(
+        self, *, session, repository, admin_authorization_service=None, pricing_repository=None
+    ):
         self.session = session
         self.repository = repository
+        self.pricing_repository = pricing_repository
         self.admin_authz = admin_authorization_service
 
     # ------------------------------------------------------------ posting
@@ -154,6 +157,26 @@ class LedgerService:
 
     async def post_disbursement(self, d) -> LedgerTransaction:
         amount = dom.quantize(d.amount)
+        lines = [dom.debit(dom.LOAN_PRINCIPAL, amount), dom.credit(dom.BANK, amount)]
+        snapshot = None
+        if self.pricing_repository is not None:
+            snapshot = await self.pricing_repository.get_snapshot(d.loan_offer_id)
+        if snapshot is not None:
+            # Priced loan: the customer owes the full principal, but the bank
+            # sent only principal - fee - GST. The fee is our income; the GST
+            # is a liability to the government, never income.
+            principal = dom.quantize(snapshot.principal)
+            fee = dom.quantize(snapshot.processing_fee)
+            gst = dom.quantize(snapshot.gst_amount)
+            if amount != principal - fee - gst or amount != dom.quantize(snapshot.net_payout):
+                raise dom.LedgerConflict(
+                    "The disbursed amount does not match the offer's net payout"
+                )
+            lines = [dom.debit(dom.LOAN_PRINCIPAL, principal), dom.credit(dom.BANK, amount)]
+            if fee > 0:
+                lines.append(dom.credit(dom.FEE_INCOME, fee))
+            if gst > 0:
+                lines.append(dom.credit(dom.GST_PAYABLE, gst))
         return await self.post(
             kind=TxKind.DISBURSEMENT,
             idempotency_key=f"disbursement:{d.id}:paid",
@@ -161,7 +184,7 @@ class LedgerService:
             source_id=d.id,
             loan_offer_id=d.loan_offer_id,
             user_id=d.user_id,
-            lines=[dom.debit(dom.LOAN_PRINCIPAL, amount), dom.credit(dom.BANK, amount)],
+            lines=lines,
             description=f"Loan disbursed (utr {d.utr or 'n/a'})",
         )
 
@@ -181,14 +204,15 @@ class LedgerService:
         self, *, payment, principal: Decimal, interest: Decimal, fees: Decimal, unapplied: Decimal
     ) -> LedgerTransaction:
         """Cash in. Dr bank for the full amount received; credit the receivable
-        for principal, income accounts for interest/fees, and a liability for
+        for principal, income accounts for interest and late charges (the
+        processing fee is taken at disbursement, never on instalments), and a liability for
         any receipt that matched nothing due (never silently dropped)."""
         total = dom.quantize(payment.amount)
         lines = [dom.debit(dom.BANK, total)]
         for code, amount in (
             (dom.LOAN_PRINCIPAL, principal),
             (dom.INTEREST_INCOME, interest),
-            (dom.FEE_INCOME, fees),
+            (dom.PENAL_INCOME, fees),  # installment fees are late/bounce charges only
             (dom.UNAPPLIED_RECEIPTS, unapplied),
         ):
             if amount > 0:
