@@ -13,6 +13,7 @@ from app.services.audit_log import AuditLogService
 from app.services.document import DocumentService
 from app.services.loan_offer import LoanOfferService
 from app.services.loan_offer_issuance import LoanOfferIssuanceService
+from app.services.pricing_factory import build_pricing_service
 
 
 def build_loan_offer_service(session: AsyncSession) -> LoanOfferService:
@@ -30,6 +31,7 @@ def build_loan_offer_service(session: AsyncSession) -> LoanOfferService:
             admin_user_repository=admin_users,
         ),
         decision_repository=LoanDecisionRepository(session),
+        pricing_service=build_pricing_service(session),
     )
 
 

@@ -10,6 +10,7 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from app.core.config import Settings
+from app.domain import pricing as pricing_dom
 from app.domain import repayment as dom
 from app.domain.admin import AdminPermission
 from app.domain.repayment import (
@@ -23,6 +24,7 @@ from app.domain.repayment import (
 )
 from app.domain.repayment import PaymentStatus as S
 from app.models.repayment import RepaymentPayment
+from app.repositories.pricing import PricingRepository
 from app.providers.payment import (
     PaymentProvider,
     PaymentProviderRejected,
@@ -82,6 +84,7 @@ class RepaymentService:
         self.audit = audit_log_service
         self.admin_authz = admin_authorization_service
         self.settings = settings
+        self.pricing_repository = PricingRepository(session)
 
     # ------------------------------------------------------------ helpers
 
@@ -145,7 +148,7 @@ class RepaymentService:
         *,
         actor_user_id,
         offer_id,
-        installment_count: int = 1,
+        installment_count: int | None = None,
         interval_days: int | None = None,
         request_id=None,
         ip_address=None,
@@ -166,22 +169,55 @@ class RepaymentService:
         if await self.repository.get_live_schedule_for_offer(offer.id) is not None:
             raise RepaymentConflict("A repayment schedule already exists for this loan")
 
-        interval = interval_days or max(1, offer.tenure_days // installment_count)
-        if interval * installment_count > offer.tenure_days:
-            raise RepaymentConflict("The schedule would run past the offer tenure")
-        rate = (offer.commercial_terms or {}).get("interest_rate_percent_per_annum")
-        try:
-            rate = Decimal(str(rate)) if rate not in (None, "") else None
-        except InvalidOperation as exc:
-            raise RepaymentConflict("The offer has an unreadable interest rate") from exc
+        snapshot = await self.pricing_repository.get_snapshot(offer.id)
         start = dom.today_ist(disbursement.completed_at)
-        plans = dom.build_schedule(
-            principal=disbursement.amount,
-            count=installment_count,
-            start=start,
-            interval_days=interval,
-            annual_rate_percent=rate,
-        )
+        if snapshot is not None:
+            # Priced loan: the schedule IS the offer's frozen terms (monthly
+            # EMIs on a reducing balance). The request may not change them.
+            if installment_count is not None and installment_count != snapshot.months:
+                raise RepaymentConflict("The instalment count is fixed by the offer")
+            if interval_days is not None and interval_days != pricing_dom.MONTH_DAYS:
+                raise RepaymentConflict("The instalment interval is fixed by the offer")
+            if disbursement.amount != snapshot.net_payout:
+                raise RepaymentConflict("The disbursed amount does not match the offer")
+            try:
+                emi_rows = pricing_dom.emi_schedule(
+                    principal=snapshot.principal,
+                    annual_interest_percent=snapshot.annual_interest_percent,
+                    months=snapshot.months,
+                    start=start,
+                )
+            except pricing_dom.PricingError as exc:
+                raise RepaymentConflict(str(exc)) from exc
+            plans = [
+                dom.InstallmentPlan(
+                    number=r.number,
+                    due_date=r.due_date,
+                    principal_due=r.principal,
+                    interest_due=r.interest,
+                    fee_due=Decimal("0.00"),
+                )
+                for r in emi_rows
+            ]
+            installment_count = snapshot.months
+            interval = pricing_dom.MONTH_DAYS
+        else:
+            installment_count = installment_count or 1
+            interval = interval_days or max(1, offer.tenure_days // installment_count)
+            if interval * installment_count > offer.tenure_days:
+                raise RepaymentConflict("The schedule would run past the offer tenure")
+            rate = (offer.commercial_terms or {}).get("interest_rate_percent_per_annum")
+            try:
+                rate = Decimal(str(rate)) if rate not in (None, "") else None
+            except InvalidOperation as exc:
+                raise RepaymentConflict("The offer has an unreadable interest rate") from exc
+            plans = dom.build_schedule(
+                principal=disbursement.amount,
+                count=installment_count,
+                start=start,
+                interval_days=interval,
+                annual_rate_percent=rate,
+            )
         principal_total = sum((p.principal_due for p in plans), Decimal(0))
         interest_total = sum((p.interest_due for p in plans), Decimal(0))
         fee_total = sum((p.fee_due for p in plans), Decimal(0))

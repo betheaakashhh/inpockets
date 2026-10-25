@@ -21,6 +21,7 @@ from app.domain.disbursement import (
     DisbursementStatus as S,
 )
 from app.models.disbursement import Disbursement
+from app.repositories.pricing import PricingRepository
 from app.providers.disbursement import (
     DisbursementProvider,
     DisbursementProviderRejected,
@@ -142,6 +143,12 @@ class DisbursementService:
         )
         return d
 
+    async def _payout_amount(self, offer):
+        """What the bank actually sends: the offer's net payout for a priced
+        loan (principal less fee and GST), otherwise the full principal."""
+        snapshot = await PricingRepository(self.session).get_snapshot(offer.id)
+        return offer.principal_amount if snapshot is None else snapshot.net_payout
+
     async def _new_row(self, offer, *, actor_user_id, retry_of) -> Disbursement:
         if offer.status != "ACCEPTED":
             raise DisbursementConflict("Only an accepted offer can be disbursed")
@@ -160,7 +167,7 @@ class DisbursementService:
             loan_offer_version=offer.version,
             esign_transaction_id=esign.id,
             bank_verification_id=bank.id,
-            amount=offer.principal_amount,
+            amount=await self._payout_amount(offer),
             currency="INR",
             beneficiary_last4=bank.account_last4,
             beneficiary_ifsc=bank.ifsc,

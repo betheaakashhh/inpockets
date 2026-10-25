@@ -42,6 +42,8 @@ from app.models.repayment import (
     RepaymentSchedule,
 )
 from app.models.ledger import LedgerAccount, LedgerEntry, LedgerTransaction
+from app.models.pricing import LoanOfferPricing, PricingVersion
+from app.models.late_charge import LateChargeAssessment
 
 __all__ = [
     "User",
@@ -90,4 +92,7 @@ __all__ = [
     "RepaymentPayment",
     "RepaymentAllocation",
     "RepaymentEvent",
+    "PricingVersion",
+    "LoanOfferPricing",
+    "LateChargeAssessment",
 ]

@@ -48,7 +48,7 @@ async def clean_database() -> None:
         # documents <-> loan_offers reference each other (RESTRICT) and issued
         # offers are immutable by trigger, so neither side can be deleted or
         # nulled row-by-row. TRUNCATE clears both together (test DB only).
-        await session.execute(text("TRUNCATE ledger_entries, ledger_transactions, repayment_events, repayment_payment_allocations, repayment_payments, repayment_installments, repayment_schedules, disbursement_events, disbursements, bank_account_verifications, esign_events, esign_transactions, loan_offers, documents CASCADE"))
+        await session.execute(text("TRUNCATE ledger_entries, ledger_transactions, loan_offer_pricing, pricing_versions, repayment_events, repayment_payment_allocations, repayment_payments, repayment_installments, repayment_schedules, disbursement_events, disbursements, bank_account_verifications, esign_events, esign_transactions, loan_offers, documents CASCADE"))
         await session.execute(delete(UserSession))
         await session.execute(delete(OTPVerification))
         # audit_logs is append-only by trigger (and its admin FK is SET NULL,

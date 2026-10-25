@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.admin import AdminPermission
 from app.domain.loan_application import LoanApplicationStatus
 import app.domain.loan_offer as offer_domain
+import app.domain.pricing as pricing_domain
 from app.domain.loan_offer import (
     LoanOfferConflict,
     LoanOfferNotFound,
@@ -39,6 +40,7 @@ class LoanOfferService:
         admin_authorization_service: AdminAuthorizationService,
         audit_log_service: AuditLogService,
         decision_repository: LoanDecisionRepository | None = None,
+        pricing_service=None,
     ):
         self.session = session
         self.offer_repository = offer_repository
@@ -47,6 +49,7 @@ class LoanOfferService:
         self.admin_authorization_service = admin_authorization_service
         self.audit_log_service = audit_log_service
         self.decision_repository = decision_repository
+        self.pricing_service = pricing_service
         self.admin_user_repository = AdminUserRepository(session)
 
     # ------------------------------------------------------------------
@@ -110,15 +113,35 @@ class LoanOfferService:
         if admin is None or not admin.is_active:
             raise PermissionError("Active lender admin required.")
 
+        # When approved pricing is in force the price is computed by the
+        # server and frozen on the offer; the admin cannot type price terms.
+        # With no approved pricing the older free-form terms still apply.
+        prepared = None
+        stored_terms = terms.commercial_terms
+        if self.pricing_service is not None:
+            prepared = await self.pricing_service.prepare(
+                principal=terms.principal_amount, tenure_days=terms.tenure_days
+            )
+        if prepared is not None:
+            clash = sorted(set(stored_terms) & pricing_domain.RESERVED_TERM_KEYS)
+            if clash:
+                raise ValueError(
+                    "These terms are set from the approved pricing and cannot be "
+                    f"supplied: {', '.join(clash)}"
+                )
+            stored_terms = {**stored_terms, **prepared.display_terms()}
+
         offer = await self.offer_repository.create(
             loan_application_id=application.id,
             user_id=application.user_id,
             version=version,
             principal_amount=terms.principal_amount,
             tenure_days=terms.tenure_days,
-            commercial_terms=terms.commercial_terms,
+            commercial_terms=stored_terms,
             created_by_admin_user_id=admin.id,
         )
+        if prepared is not None:
+            await self.pricing_service.attach_snapshot(offer_id=offer.id, prepared=prepared)
 
         await self.audit_log_service.record_admin_action(
             actor_user_id=actor_user_id,
@@ -132,6 +155,9 @@ class LoanOfferService:
                 "version": offer.version,
                 "principal_amount": str(offer.principal_amount),
                 "tenure_days": offer.tenure_days,
+                "pricing_version": (
+                    prepared.version.version if prepared is not None else None
+                ),
             },
         )
         return offer
