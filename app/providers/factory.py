@@ -112,3 +112,23 @@ def get_disbursement_provider() -> DisbursementProvider:
         )
 
     raise RuntimeError(f"Unsupported disbursement provider: {provider}")
+
+
+from app.providers.payment import PaymentProvider
+
+
+def get_payment_provider() -> PaymentProvider:
+    settings = get_settings()
+    provider = settings.payment_provider.lower()
+
+    if provider == "development":
+        if settings.environment.lower() == "production":
+            raise RuntimeError("Development payment provider is not allowed in production")
+        from app.providers.payment_development import DevelopmentPaymentProvider
+
+        return DevelopmentPaymentProvider(
+            webhook_secret=settings.payment_webhook_secret,
+            tolerance_seconds=settings.payment_callback_tolerance_seconds,
+        )
+
+    raise RuntimeError(f"Unsupported payment provider: {provider}")

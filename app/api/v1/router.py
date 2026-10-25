@@ -26,6 +26,11 @@ from app.api.v1.disbursement import router as disbursement_router
 from app.api.v1.admin_disbursement import router as admin_disbursement_router
 from app.api.v1.webhooks_disbursement import router as webhooks_disbursement_router
 
+from app.api.v1.repayment import router as repayment_router
+from app.api.v1.admin_repayment import router as admin_repayment_router
+from app.api.v1.webhooks_payment import router as webhooks_payment_router
+from app.api.v1.admin_ledger import router as admin_ledger_router
+
 api_router = APIRouter()
 
 api_router.include_router(
@@ -144,4 +149,28 @@ api_router.include_router(
     webhooks_disbursement_router,
     prefix="/webhooks",
     tags=["Webhooks"],
+)
+
+api_router.include_router(
+    repayment_router,
+    prefix="/loan-offers",
+    tags=["Repayment"],
+)
+
+api_router.include_router(
+    admin_repayment_router,
+    prefix="/admin/repayments",
+    tags=["Admin Repayment"],
+)
+
+api_router.include_router(
+    webhooks_payment_router,
+    prefix="/webhooks",
+    tags=["Webhooks"],
+)
+
+api_router.include_router(
+    admin_ledger_router,
+    prefix="/admin/ledger",
+    tags=["Admin Ledger"],
 )

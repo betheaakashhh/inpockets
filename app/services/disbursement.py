@@ -51,6 +51,7 @@ class DisbursementService:
         bank_service,
         profile_repository,
         admin_user_repository,
+        ledger_service,
         provider: DisbursementProvider,
         audit_log_service,
         admin_authorization_service,
@@ -64,6 +65,7 @@ class DisbursementService:
         self.bank_service = bank_service
         self.profile_repository = profile_repository
         self.admin_user_repository = admin_user_repository
+        self.ledger = ledger_service
         self.provider = provider
         self.audit = audit_log_service
         self.admin_authz = admin_authorization_service
@@ -334,6 +336,7 @@ class DisbursementService:
                 self._move(d, S.REVERSED)
                 d.reversed_at = now
                 await self.session.flush()
+                await self.ledger.reverse_disbursement(d)
                 await self._audit_system("DISBURSEMENT_REVERSED", d)
                 return "REVERSED"
             await self._audit_system("DISBURSEMENT_CONFLICT_IGNORED", d,
@@ -368,11 +371,14 @@ class DisbursementService:
             d.completed_at = now
             d.review_reason = None
             await self.session.flush()
+            # The books move in the same transaction as the payout state.
+            await self.ledger.post_disbursement(d)
             await self._audit_system("DISBURSEMENT_SUCCESS", d)
             if status == "REVERSED":
                 self._move(d, S.REVERSED)
                 d.reversed_at = now
                 await self.session.flush()
+                await self.ledger.reverse_disbursement(d)
                 await self._audit_system("DISBURSEMENT_REVERSED", d)
                 return "REVERSED"
             return "SUCCESS"

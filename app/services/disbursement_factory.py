@@ -15,6 +15,7 @@ from app.services.admin_authorization import AdminAuthorizationService
 from app.services.audit_log import AuditLogService
 from app.services.bank_verification_factory import build_bank_verification_service
 from app.services.disbursement import DisbursementService
+from app.services.ledger_factory import build_ledger_service
 
 
 def build_disbursement_service(session: AsyncSession) -> DisbursementService:
@@ -28,6 +29,7 @@ def build_disbursement_service(session: AsyncSession) -> DisbursementService:
         bank_service=build_bank_verification_service(session),
         profile_repository=UserProfileRepository(session),
         admin_user_repository=admin_users,
+        ledger_service=build_ledger_service(session),
         provider=get_disbursement_provider(),
         audit_log_service=AuditLogService(
             audit_log_repository=AuditLogRepository(session),
