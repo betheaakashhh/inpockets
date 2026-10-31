@@ -61,8 +61,13 @@ class AdminPermission(StrEnum):
     COLLECTIONS_UPDATE = "COLLECTIONS_UPDATE"
     COLLECTIONS_MANAGE = "COLLECTIONS_MANAGE"
 
+    NOTIFICATION_READ = "NOTIFICATION_READ"
+    NOTIFICATION_MANAGE = "NOTIFICATION_MANAGE"
+    NOTIFICATION_APPROVE = "NOTIFICATION_APPROVE"
+
     SUPPORT_READ = "SUPPORT_READ"
     SUPPORT_UPDATE = "SUPPORT_UPDATE"
+    SUPPORT_MANAGE = "SUPPORT_MANAGE"
 
     AUDIT_READ = "AUDIT_READ"
 
@@ -138,6 +143,7 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.LOAN_APPLICATION_READ,
             AdminPermission.SUPPORT_READ,
             AdminPermission.SUPPORT_UPDATE,
+            AdminPermission.NOTIFICATION_READ,
         }
     ),
 
@@ -160,6 +166,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.RECONCILIATION_RUN,
             AdminPermission.RECONCILIATION_REVIEW,
             AdminPermission.COLLECTIONS_READ,
+            AdminPermission.NOTIFICATION_READ,
+            AdminPermission.NOTIFICATION_MANAGE,
         }
     ),
 
@@ -174,6 +182,7 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.PRICING_READ,
             AdminPermission.RECONCILIATION_READ,
             AdminPermission.COLLECTIONS_READ,
+            AdminPermission.NOTIFICATION_READ,
             AdminPermission.AUDIT_READ,
         }
     ),
