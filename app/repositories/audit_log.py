@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
@@ -51,6 +51,8 @@ class AuditLogRepository:
         action: str | None = None,
         entity_type: str | None = None,
         actor_role: str | None = None,
+        actor_identifier: UUID | None = None,
+        request_id: str | None = None,
         start_at: datetime | None = None,
         end_at: datetime | None = None,
         limit: int = 100,
@@ -63,6 +65,16 @@ class AuditLogRepository:
             query = query.where(AuditLog.entity_type == entity_type)
         if actor_role:
             query = query.where(AuditLog.actor_role == actor_role)
+        if actor_identifier:
+            query = query.where(
+                or_(
+                    AuditLog.actor_admin_user_id == actor_identifier,
+                    AuditLog.event_metadata["actor_user_id"].as_string()
+                    == str(actor_identifier),
+                )
+            )
+        if request_id:
+            query = query.where(AuditLog.request_id == request_id)
         if start_at:
             query = query.where(AuditLog.created_at >= start_at)
         if end_at:

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.loan_offer_errors import client_ip
@@ -27,6 +28,8 @@ async def list_audit_logs(
     action: str | None = None,
     entity_type: str | None = None,
     actor_role: str | None = None,
+    actor_id: UUID | None = None,
+    request_id: str | None = None,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=200),
@@ -34,11 +37,24 @@ async def list_audit_logs(
     admin: AdminUser = Depends(get_current_admin),  # noqa: B008
     session: AsyncSession = Depends(get_db_session),  # noqa: B008
 ):
-    require_permission(AdminRole(admin.role), AdminPermission.AUDIT_READ)
+    try:
+        require_permission(AdminRole(admin.role), AdminPermission.AUDIT_READ)
+    except (PermissionError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient audit permissions",
+        ) from exc
+    if start_at and end_at and end_at <= start_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_at must be later than start_at",
+        )
     rows = await AuditLogRepository(session).list(
         action=action,
         entity_type=entity_type,
         actor_role=actor_role,
+        actor_identifier=actor_id,
+        request_id=request_id,
         start_at=start_at,
         end_at=end_at,
         limit=limit,
@@ -58,7 +74,10 @@ async def list_audit_logs(
     )
     await session.commit()
     return AuditLogPage(
-        items=[AuditLogResponse.model_validate(row) for row in rows[:limit]],
+        items=[
+            AuditLogResponse.sanitized_from_orm(row)
+            for row in rows[:limit]
+        ],
         limit=limit,
         offset=offset,
         has_more=len(rows) > limit,

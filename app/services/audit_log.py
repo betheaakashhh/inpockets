@@ -60,8 +60,8 @@ class AuditLogService:
             request_id=request_id,
             ip_address=ip_address,
             reason=reason,
-            old_value=_safe_snapshot(old_value),
-            new_value=_safe_snapshot(new_value),
+            old_value=_safe_snapshot(old_value, entity_type=entity_type),
+            new_value=_safe_snapshot(new_value, entity_type=entity_type),
             event_metadata=_safe_snapshot(event_metadata),
         )
 
@@ -89,8 +89,8 @@ class AuditLogService:
             request_id=request_id,
             ip_address=ip_address,
             reason=reason,
-            old_value=_safe_snapshot(old_value),
-            new_value=_safe_snapshot(new_value),
+            old_value=_safe_snapshot(old_value, entity_type=entity_type),
+            new_value=_safe_snapshot(new_value, entity_type=entity_type),
             event_metadata=_safe_snapshot({
                 **(event_metadata or {}),
                 "actor_type": "CUSTOMER",
@@ -117,8 +117,8 @@ class AuditLogService:
             entity_type=entity_type,
             entity_id=entity_id,
             reason=reason,
-            old_value=_safe_snapshot(old_value),
-            new_value=_safe_snapshot(new_value),
+            old_value=_safe_snapshot(old_value, entity_type=entity_type),
+            new_value=_safe_snapshot(new_value, entity_type=entity_type),
             event_metadata=_safe_snapshot({
                 **(event_metadata or {}),
                 "actor_type": "SYSTEM",
@@ -135,6 +135,32 @@ _REDACTED_KEYS = {
 _NORMALIZED_REDACTED_KEYS = {
     "".join(character for character in key.lower() if character.isalnum())
     for key in _REDACTED_KEYS
+}
+_SENSITIVE_ENTITY_MARKERS = (
+    "customer",
+    "user",
+    "kyc",
+    "identity",
+    "document",
+    "bank",
+    "pan",
+    "aadhaar",
+    "biometric",
+)
+_SAFE_AUDIT_FIELDS = {
+    "action",
+    "actor_type",
+    "actoruserid",
+    "amount",
+    "code",
+    "decision",
+    "entityid",
+    "reason",
+    "reference",
+    "route",
+    "status",
+    "state",
+    "transactionid",
 }
 
 
@@ -163,18 +189,25 @@ def _is_sensitive_key(key: str) -> bool:
     )
 
 
-def _safe_snapshot(value):
+def _safe_snapshot(value, *, entity_type: str | None = None):
     """Return a JSON-safe, bounded snapshot without credentials or raw PII."""
     if value is None:
         return None
     if isinstance(value, Mapping):
         return {
-            str(key): "[REDACTED]" if _is_sensitive_key(str(key))
-            else _safe_snapshot(item)
+            str(key): "[REDACTED]"
+            if _is_sensitive_key(str(key))
+            or (
+                entity_type
+                and any(marker in entity_type.lower() for marker in _SENSITIVE_ENTITY_MARKERS)
+                and "".join(character for character in str(key).lower() if character.isalnum())
+                not in _SAFE_AUDIT_FIELDS
+            )
+            else _safe_snapshot(item, entity_type=entity_type)
             for key, item in value.items()
         }
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [_safe_snapshot(item) for item in value[:100]]
+        return [_safe_snapshot(item, entity_type=entity_type) for item in value[:100]]
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, Decimal):

@@ -1,4 +1,5 @@
 import asyncio
+import re
 import selectors
 from uuid import uuid4
 
@@ -24,6 +25,29 @@ from app.models.user_session import UserSession
 settings = get_settings()
 
 
+def assert_safe_test_database(
+    database_name: str | None,
+    database_user: str | None,
+    environment: str,
+) -> None:
+    if environment.lower() in {"production", "prod", "staging"}:
+        raise RuntimeError(
+            "Refusing destructive test cleanup in production or staging"
+        )
+    if not database_name or not re.search(
+        r"(^|[_-])test([_-]|$)", database_name.lower()
+    ):
+        raise RuntimeError(
+            "Refusing destructive test cleanup: connected database "
+            f"'{database_name}' is not a dedicated test database"
+        )
+    if not database_user:
+        raise RuntimeError(
+            "Refusing destructive test cleanup: database identity "
+            "could not be safely verified"
+        )
+
+
 @pytest.fixture(scope="session")
 def event_loop_policy():
     class SelectorEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
@@ -38,6 +62,10 @@ async def clean_database(request) -> None:
     if request.node.get_closest_marker("unit"):
         return
     async for session in get_db_session():
+        database_name, database_user = (
+            await session.execute(text("SELECT current_database(), current_user"))
+        ).one()
+        assert_safe_test_database(database_name, database_user, settings.environment)
         await session.execute(delete(PolicyEvaluation))
         await session.execute(delete(PolicyRule))
         await session.execute(delete(PolicyVersion))

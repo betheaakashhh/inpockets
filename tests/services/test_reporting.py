@@ -60,3 +60,35 @@ async def test_reporting_service_rejects_unbounded_date_range():
             limit=10,
             offset=0,
         )
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_rejects_historical_exposure():
+    service = ReportingService.__new__(ReportingService)
+    service.repository = type("Repository", (), {"exposure": AsyncMock()})()
+
+    with pytest.raises(ValueError, match="historical exposure"):
+        await service.generate(
+            actor_role="SUPER_ADMIN",
+            report_type=ReportType.EXPOSURE,
+            start_at=datetime(2026, 1, 1),
+            end_at=datetime(2026, 1, 2),
+            limit=10,
+            offset=0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_requires_category_permission():
+    service = ReportingService.__new__(ReportingService)
+    service.repository = type("Repository", (), {"risk_fraud": AsyncMock()})()
+
+    with pytest.raises(PermissionError):
+        await service.generate(
+            actor_role="FINANCE",
+            report_type=ReportType.RISK_FRAUD,
+            start_at=None,
+            end_at=None,
+            limit=10,
+            offset=0,
+        )

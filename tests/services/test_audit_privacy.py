@@ -37,3 +37,31 @@ def test_audit_snapshot_bounds_lists_and_long_strings():
 
     assert len(snapshot["items"]) == 100
     assert len(snapshot["message"]) == 500
+
+
+def test_sensitive_entity_snapshot_allowlists_business_metadata():
+    snapshot = _safe_snapshot(
+        {
+            "status": "VERIFIED",
+            "reference": "provider-123",
+            "amount": Decimal("10.00"),
+            "name": "Customer Name",
+            "nested": {"phone_number": "9999999999"},
+        },
+        entity_type="bank_verification",
+    )
+
+    assert snapshot["status"] == "VERIFIED"
+    assert snapshot["reference"] == "provider-123"
+    assert snapshot["amount"] == "10.00"
+    assert snapshot["name"] == "[REDACTED]"
+    assert snapshot["nested"] == "[REDACTED]"
+
+
+def test_historical_snapshot_is_safe_when_read_back():
+    snapshot = _safe_snapshot(
+        {"legacy_field": "secret", "state": "APPROVED"},
+        entity_type="customer_profile",
+    )
+
+    assert snapshot == {"legacy_field": "[REDACTED]", "state": "APPROVED"}

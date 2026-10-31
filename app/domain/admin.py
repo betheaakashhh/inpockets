@@ -71,7 +71,9 @@ class AdminPermission(StrEnum):
 
     AUDIT_READ = "AUDIT_READ"
     REPORT_READ = "REPORT_READ"
-    REPORT_EXPORT = "REPORT_EXPORT"
+    REPORT_FINANCIAL = "REPORT_FINANCIAL"
+    REPORT_RISK = "REPORT_RISK"
+    REPORT_COLLECTIONS = "REPORT_COLLECTIONS"
 
     ADMIN_MANAGE = "ADMIN_MANAGE"
 
@@ -98,6 +100,7 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.LOAN_OFFER_ISSUE,
             AdminPermission.LOAN_OFFER_CANCEL,
             AdminPermission.REPORT_READ,
+            AdminPermission.REPORT_RISK,
         }
     ),
 
@@ -172,6 +175,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.NOTIFICATION_READ,
             AdminPermission.NOTIFICATION_MANAGE,
             AdminPermission.REPORT_READ,
+            AdminPermission.REPORT_FINANCIAL,
+            AdminPermission.REPORT_COLLECTIONS,
         }
     ),
 
@@ -189,7 +194,9 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.NOTIFICATION_READ,
             AdminPermission.AUDIT_READ,
             AdminPermission.REPORT_READ,
-            AdminPermission.REPORT_EXPORT,
+            AdminPermission.REPORT_FINANCIAL,
+            AdminPermission.REPORT_RISK,
+            AdminPermission.REPORT_COLLECTIONS,
         }
     ),
 
