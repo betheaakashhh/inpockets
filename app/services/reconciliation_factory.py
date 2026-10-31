@@ -1,0 +1,27 @@
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.providers.factory import get_settlement_provider
+from app.repositories.admin_user import AdminUserRepository
+from app.repositories.audit_log import AuditLogRepository
+from app.repositories.reconciliation import ReconciliationRepository
+from app.services.admin_authorization import AdminAuthorizationService
+from app.services.audit_log import AuditLogService
+from app.services.reconciliation import ReconciliationService
+
+
+def build_reconciliation_service(session: AsyncSession) -> ReconciliationService:
+    admin_users = AdminUserRepository(session)
+    return ReconciliationService(
+        session=session,
+        repository=ReconciliationRepository(session),
+        admin_user_repository=admin_users,
+        admin_authorization_service=AdminAuthorizationService(admin_user_repository=admin_users),
+        audit_log_service=AuditLogService(
+            audit_log_repository=AuditLogRepository(session), admin_user_repository=admin_users
+        ),
+        provider=get_settlement_provider(),
+        settings=get_settings(),
+    )

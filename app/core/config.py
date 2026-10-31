@@ -84,6 +84,24 @@ class Settings(BaseSettings):
     payment_provider_timeout_seconds: float = 15.0
     payment_reconcile_grace_minutes: int = 10
     payment_max_unresolved_hours: int = 24
+    # Reconciliation (2.14): the provider's settlement report vs our records.
+    settlement_provider: str = "development"
+    # How many past days the worker keeps reconciled (yesterday and back).
+    reconciliation_lookback_days: int = 3
+    # Bounded work: a run with more lines than this fails instead of half-running.
+    reconciliation_max_lines: int = 20000
+    # A RUNNING run older than this is treated as crashed and may be retaken.
+    reconciliation_stale_minutes: int = 15
+    # A run that failed this many times stops being retried by the worker
+    # (an admin can still see it and start it again).
+    reconciliation_max_attempts: int = 5
+    # Collections (2.15). Reminders only create a request for the notification
+    # module; they stay OFF until the lender approves the reminder wording and
+    # the contact rules. Escalation is internal and on by default.
+    collections_reminders_enabled: bool = False
+    collections_escalation_enabled: bool = True
+    # Bounded work per worker pass.
+    collections_batch_size: int = 200
     # Interest and fee income may only be posted to the ledger once the
     # lender/accounting rules are approved. While False, a schedule that
     # contains interest or fees cannot be created.
