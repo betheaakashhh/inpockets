@@ -1,5 +1,7 @@
+from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
@@ -42,3 +44,32 @@ class AuditLogRepository:
         await self.session.flush()
 
         return log
+
+    async def list(
+        self,
+        *,
+        action: str | None = None,
+        entity_type: str | None = None,
+        actor_role: str | None = None,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AuditLog]:
+        query: Select[tuple[AuditLog]] = select(AuditLog)
+        if action:
+            query = query.where(AuditLog.action == action)
+        if entity_type:
+            query = query.where(AuditLog.entity_type == entity_type)
+        if actor_role:
+            query = query.where(AuditLog.actor_role == actor_role)
+        if start_at:
+            query = query.where(AuditLog.created_at >= start_at)
+        if end_at:
+            query = query.where(AuditLog.created_at < end_at)
+        result = await self.session.scalars(
+            query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .offset(offset)
+            .limit(limit + 1)
+        )
+        return list(result.all())
