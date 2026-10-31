@@ -46,6 +46,14 @@ from app.models.pricing import LoanOfferPricing, PricingVersion
 from app.models.late_charge import LateChargeAssessment
 from app.models.reconciliation import ReconciliationRecord, ReconciliationRun
 from app.models.collection import CollectionCase, CollectionEvent
+from app.models.support import SupportTicket, SupportTicketEvent
+from app.models.notification import (
+    Notification,
+    NotificationAttempt,
+    NotificationEvent,
+    NotificationPreference,
+    NotificationTemplate,
+)
 
 __all__ = [
     "User",
@@ -101,4 +109,11 @@ __all__ = [
     "ReconciliationRecord",
     "CollectionCase",
     "CollectionEvent",
+    "SupportTicket",
+    "SupportTicketEvent",
+    "Notification",
+    "NotificationAttempt",
+    "NotificationEvent",
+    "NotificationPreference",
+    "NotificationTemplate",
 ]

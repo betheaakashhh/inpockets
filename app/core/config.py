@@ -102,6 +102,17 @@ class Settings(BaseSettings):
     collections_escalation_enabled: bool = True
     # Bounded work per worker pass.
     collections_batch_size: int = 200
+    # Notifications (2.16)
+    notification_provider: str = "development"
+    notification_webhook_secret: str | None = None
+    notification_callback_tolerance_seconds: int = 300
+    notification_batch_size: int = 100
+    notification_max_attempts: int = 5
+    # Support tickets (2.17)
+    support_max_open_tickets_per_user: int = 10
+    # Complaints must be resolved within this many days (placeholder: the
+    # lender's grievance policy owns the real figure).
+    support_complaint_resolution_days: int = 30
     # Interest and fee income may only be posted to the ledger once the
     # lender/accounting rules are approved. While False, a schedule that
     # contains interest or fees cannot be created.
