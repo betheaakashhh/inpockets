@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Select, case, func, select, union_all
+from sqlalchemy import Select, String, case, func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.ledger import LOAN_PRINCIPAL
 from app.models.collection import CollectionCase
 from app.models.credit_assessment import CreditAssessment
 from app.models.disbursement import Disbursement
 from app.models.fraud_assessment import FraudAssessment
+from app.models.ledger import LedgerAccount, LedgerEntry, LedgerTransaction
 from app.models.loan_application import LoanApplication
 from app.models.loan_decision import LoanDecision
 from app.models.notification import Notification
@@ -49,9 +51,13 @@ class ReportingRepository:
         return [{"group": row.group, "count": row.count} for row in result]
 
     async def applications(self, **filters) -> list[dict]:
-        return await self._grouped(
+        rows = await self._grouped(
             LoanApplication, LoanApplication.status, **filters
         )
+        return [
+            {**row, "as_of": "current", "historical": False}
+            for row in rows
+        ]
 
     async def decisions(self, **filters) -> list[dict]:
         query = select(
@@ -70,6 +76,7 @@ class ReportingRepository:
             {
                 "route": row.route,
                 "count": row.count,
+                "historical": True,
             }
             for row in result
         ]
@@ -91,23 +98,66 @@ class ReportingRepository:
         ]
 
     async def exposure(self, **filters) -> list[dict]:
-        query = select(
-            func.coalesce(func.sum(RepaymentInstallment.principal_due), 0).label("principal_due"),
-            func.coalesce(func.sum(RepaymentInstallment.principal_paid), 0).label("principal_paid"),
-            func.coalesce(func.sum(RepaymentInstallment.interest_due), 0).label("interest_due"),
+        schedule_query = select(
+            func.coalesce(func.sum(RepaymentSchedule.principal_total), 0).label(
+                "principal_due"
+            ),
+        ).where(RepaymentSchedule.status == "ACTIVE")
+        installment_query = select(
+            func.coalesce(func.sum(RepaymentInstallment.interest_due), 0).label(
+                "interest_due"
+            ),
             func.coalesce(func.sum(RepaymentInstallment.fee_due), 0).label("fee_due"),
             func.count(RepaymentInstallment.id).label("installments"),
         ).join(
-            RepaymentSchedule, RepaymentSchedule.id == RepaymentInstallment.schedule_id
+            RepaymentSchedule,
+            RepaymentSchedule.id == RepaymentInstallment.schedule_id,
         ).where(RepaymentSchedule.status == "ACTIVE")
-        row = (await self.session.execute(query)).one()
+        schedule_row = (await self.session.execute(schedule_query)).one()
+        installment_row = (await self.session.execute(installment_query)).one()
+
+        ledger_balance = case(
+            (LedgerEntry.direction == "DEBIT", LedgerEntry.amount),
+            else_=-LedgerEntry.amount,
+        )
+        ledger_query = select(
+            func.coalesce(func.sum(ledger_balance), 0).label("outstanding_principal"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            LedgerTransaction.kind.in_(
+                                ("ADJUSTMENT", "ADJUSTMENT_REVERSAL")
+                            ),
+                            ledger_balance,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("adjustment_activity"),
+        ).select_from(LedgerEntry).join(
+            LedgerTransaction, LedgerTransaction.id == LedgerEntry.transaction_id
+        ).join(
+            LedgerAccount, LedgerAccount.id == LedgerEntry.account_id
+        ).join(
+            RepaymentSchedule,
+            RepaymentSchedule.loan_offer_id == LedgerTransaction.loan_offer_id,
+        ).where(
+            LedgerAccount.code == LOAN_PRINCIPAL,
+            RepaymentSchedule.status == "ACTIVE",
+        )
+        ledger_row = (await self.session.execute(ledger_query)).one()
         return [{
-            "principal_due": str(row.principal_due),
-            "principal_paid": str(row.principal_paid),
-            "outstanding_principal": str(row.principal_due - row.principal_paid),
-            "interest_due": str(row.interest_due),
-            "fee_due": str(row.fee_due),
-            "installments": row.installments,
+            "principal_due": str(schedule_row.principal_due),
+            "principal_paid": str(
+                schedule_row.principal_due - ledger_row.outstanding_principal
+            ),
+            "outstanding_principal": str(ledger_row.outstanding_principal),
+            "interest_due": str(installment_row.interest_due),
+            "fee_due": str(installment_row.fee_due),
+            "installments": installment_row.installments,
+            "ledger_adjustment_activity": str(ledger_row.adjustment_activity),
             "as_of": "current",
             "historical": False,
         }]
@@ -120,12 +170,24 @@ class ReportingRepository:
             func.coalesce(
                 func.sum(
                     case(
+                        (
+                            RepaymentPayment.status.in_(("SUCCESS", "REVERSED")),
+                            RepaymentPayment.amount,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("gross_successful_amount"),
+            func.coalesce(
+                func.sum(
+                    case(
                         (RepaymentPayment.status == "SUCCESS", RepaymentPayment.amount),
                         else_=0,
                     )
                 ),
                 0,
-            ).label("confirmed_amount"),
+            ).label("retained_net_amount"),
             func.coalesce(func.sum(RepaymentPayment.principal_applied), 0).label("principal_applied"),
             func.coalesce(func.sum(RepaymentPayment.interest_applied), 0).label("interest_applied"),
             func.coalesce(func.sum(RepaymentPayment.fee_applied), 0).label("fee_applied"),
@@ -141,7 +203,9 @@ class ReportingRepository:
                 "status": row.status,
                 "count": row.count,
                 "attempted_amount": str(row.attempted_amount),
-                "confirmed_amount": str(row.confirmed_amount),
+                "gross_successful_amount": str(row.gross_successful_amount),
+                "retained_net_amount": str(row.retained_net_amount),
+                "confirmed_amount": str(row.retained_net_amount),
                 "principal_applied": str(row.principal_applied),
                 "interest_applied": str(row.interest_applied),
                 "fee_applied": str(row.fee_applied),
@@ -156,31 +220,61 @@ class ReportingRepository:
             func.count(CollectionCase.id).label("cases"),
             func.coalesce(func.sum(CollectionCase.overdue_principal), 0).label("principal"),
         ).where(CollectionCase.status != "CLOSED")
-        query = self._date_filter(query, CollectionCase.updated_at, filters)
         result = await self.session.execute(
             query.group_by(CollectionCase.dpd_bucket).order_by(CollectionCase.dpd_bucket)
             .offset(filters["offset"]).limit(filters["limit"] + 1)
         )
-        return [
-            {"bucket": row.bucket, "cases": row.cases, "overdue_principal": str(row.principal)}
+        rows = [
+            {
+                "metric": "current",
+                "bucket": row.bucket,
+                "cases": row.cases,
+                "overdue_principal": str(row.principal),
+            }
             for row in result
         ]
+        return rows
 
     async def collections(self, **filters) -> list[dict]:
-        query = select(
+        if filters["start_at"] or filters["end_at"]:
+            opened = select(
+                func.count(CollectionCase.id).label("cases"),
+            )
+            opened = self._date_filter(opened, CollectionCase.opened_at, filters)
+            opened_row = (await self.session.execute(opened)).one()
+            closed = select(
+                func.count(CollectionCase.id).label("cases"),
+            ).where(CollectionCase.closed_at.is_not(None))
+            closed = self._date_filter(closed, CollectionCase.closed_at, filters)
+            closed_row = (await self.session.execute(closed)).one()
+            period_rows = [
+                {
+                    "metric": "opened_in_period",
+                    "cases": opened_row.cases,
+                },
+                {
+                    "metric": "closed_in_period",
+                    "cases": closed_row.cases,
+                },
+            ]
+            start = filters["offset"]
+            return period_rows[start : start + filters["limit"] + 1]
+
+        current_query = select(
             CollectionCase.status.label("status"),
             CollectionCase.escalation_level.label("escalation_level"),
             func.count(CollectionCase.id).label("cases"),
             func.coalesce(func.sum(CollectionCase.overdue_principal), 0).label("principal"),
         )
-        query = self._date_filter(query, CollectionCase.updated_at, filters)
+        current_query = current_query.group_by(
+            CollectionCase.status, CollectionCase.escalation_level
+        ).order_by(CollectionCase.status, CollectionCase.escalation_level)
         result = await self.session.execute(
-            query.group_by(CollectionCase.status, CollectionCase.escalation_level)
-            .order_by(CollectionCase.status, CollectionCase.escalation_level)
-            .offset(filters["offset"]).limit(filters["limit"] + 1)
+            current_query.offset(filters["offset"]).limit(filters["limit"] + 1)
         )
-        return [
+        rows = [
             {
+                "metric": "current",
                 "status": row.status,
                 "escalation_level": row.escalation_level,
                 "cases": row.cases,
@@ -188,6 +282,7 @@ class ReportingRepository:
             }
             for row in result
         ]
+        return rows[: filters["offset"] + filters["limit"] + 1]
 
     async def closures(self, **filters) -> list[dict]:
         return [{
@@ -272,9 +367,10 @@ class ReportingRepository:
             RiskAssessment.risk_band.label("category"),
             RiskAssessment.status,
             RiskAssessment.created_at,
+            RiskAssessment.id,
             func.row_number().over(
                 partition_by=RiskAssessment.loan_application_id,
-                order_by=RiskAssessment.created_at.desc(),
+                order_by=(RiskAssessment.created_at.desc(), RiskAssessment.id.desc()),
             ).label("row_number"),
         ).subquery()
         fraud_ranked = select(
@@ -282,9 +378,10 @@ class ReportingRepository:
             FraudAssessment.risk_level.label("category"),
             FraudAssessment.status,
             FraudAssessment.created_at,
+            FraudAssessment.id,
             func.row_number().over(
                 partition_by=FraudAssessment.loan_application_id,
-                order_by=FraudAssessment.created_at.desc(),
+                order_by=(FraudAssessment.created_at.desc(), FraudAssessment.id.desc()),
             ).label("row_number"),
         ).subquery()
         risk = select(
@@ -299,22 +396,45 @@ class ReportingRepository:
         ).where(fraud_ranked.c.row_number == 1)
         risk = self._date_filter(risk, risk_ranked.c.created_at, filters)
         fraud = self._date_filter(fraud, fraud_ranked.c.created_at, filters)
-        rows = []
-        for kind, query in (("RISK", risk), ("FRAUD", fraud)):
-            result = await self.session.execute(
-                query.group_by(query.selected_columns.category, query.selected_columns.status)
-                .order_by(query.selected_columns.category, query.selected_columns.status)
+        combined = union_all(
+            select(
+                risk.selected_columns.category,
+                risk.selected_columns.status,
+                func.cast("RISK", String).label("type"),
+                risk.selected_columns.count,
             )
-            rows.extend(
-                {
-                    "type": kind,
-                    "category": row.category,
-                    "status": row.status,
-                    "count": row.count,
-                }
-                for row in result
+            .group_by(risk.selected_columns.category, risk.selected_columns.status)
+            .order_by(None),
+            select(
+                fraud.selected_columns.category,
+                fraud.selected_columns.status,
+                func.cast("FRAUD", String).label("type"),
+                fraud.selected_columns.count,
             )
-        return rows[filters["offset"] : filters["offset"] + filters["limit"] + 1]
+            .group_by(fraud.selected_columns.category, fraud.selected_columns.status)
+            .order_by(None),
+        ).subquery()
+        query = (
+            select(
+                combined.c.type,
+                combined.c.category,
+                combined.c.status,
+                combined.c.count,
+            )
+            .order_by(combined.c.type, combined.c.category, combined.c.status)
+            .offset(filters["offset"])
+            .limit(filters["limit"] + 1)
+        )
+        result = await self.session.execute(query)
+        return [
+            {
+                "type": row.type,
+                "category": row.category,
+                "status": row.status,
+                "count": row.count,
+            }
+            for row in result
+        ]
 
     @staticmethod
     def _date_filter(query, column, filters):

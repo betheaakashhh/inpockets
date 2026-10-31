@@ -79,6 +79,22 @@ async def test_reporting_service_rejects_historical_exposure():
 
 
 @pytest.mark.asyncio
+async def test_reporting_service_rejects_historical_overdue_snapshot():
+    service = ReportingService.__new__(ReportingService)
+    service.repository = type("Repository", (), {"overdue": AsyncMock()})()
+
+    with pytest.raises(ValueError, match="current snapshot"):
+        await service.generate(
+            actor_role="SUPER_ADMIN",
+            report_type=ReportType.OVERDUE,
+            start_at=datetime(2026, 1, 1),
+            end_at=datetime(2026, 1, 2),
+            limit=10,
+            offset=0,
+        )
+
+
+@pytest.mark.asyncio
 async def test_reporting_service_requires_category_permission():
     service = ReportingService.__new__(ReportingService)
     service.repository = type("Repository", (), {"risk_fraud": AsyncMock()})()
@@ -92,3 +108,40 @@ async def test_reporting_service_requires_category_permission():
             limit=10,
             offset=0,
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("role", "report_type", "allowed"),
+    [
+        ("FINANCE", ReportType.REPAYMENTS, True),
+        ("FINANCE", ReportType.RISK_FRAUD, False),
+        ("SENIOR_UNDERWRITER", ReportType.RISK_FRAUD, True),
+        ("COLLECTIONS_AGENT", ReportType.COLLECTIONS, False),
+        ("AUDITOR", ReportType.COLLECTIONS, True),
+    ],
+)
+async def test_reporting_permission_matrix(role, report_type, allowed):
+    service = ReportingService.__new__(ReportingService)
+    method = report_type.value
+    service.repository = type("Repository", (), {method: AsyncMock(return_value=[])})()
+
+    if allowed:
+        await service.generate(
+            actor_role=role,
+            report_type=report_type,
+            start_at=None,
+            end_at=None,
+            limit=10,
+            offset=0,
+        )
+    else:
+        with pytest.raises(PermissionError):
+            await service.generate(
+                actor_role=role,
+                report_type=report_type,
+                start_at=None,
+                end_at=None,
+                limit=10,
+                offset=0,
+            )

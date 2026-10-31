@@ -43,6 +43,10 @@ class ReportingService:
             raise ValueError(
                 "historical exposure is unsupported; omit date filters for current exposure"
             )
+        if report_type == ReportType.OVERDUE and (start_at or end_at):
+            raise ValueError(
+                "overdue is a current snapshot; use collections for opened/closed periods"
+            )
         filters = {
             "start_at": start_at,
             "end_at": end_at,
