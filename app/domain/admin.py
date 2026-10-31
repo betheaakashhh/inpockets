@@ -53,13 +53,25 @@ class AdminPermission(StrEnum):
     PRICING_MANAGE = "PRICING_MANAGE"
     PRICING_APPROVE = "PRICING_APPROVE"
 
+    RECONCILIATION_READ = "RECONCILIATION_READ"
+    RECONCILIATION_RUN = "RECONCILIATION_RUN"
+    RECONCILIATION_REVIEW = "RECONCILIATION_REVIEW"
+
     COLLECTIONS_READ = "COLLECTIONS_READ"
     COLLECTIONS_UPDATE = "COLLECTIONS_UPDATE"
+    COLLECTIONS_MANAGE = "COLLECTIONS_MANAGE"
+
+    NOTIFICATION_READ = "NOTIFICATION_READ"
+    NOTIFICATION_MANAGE = "NOTIFICATION_MANAGE"
+    NOTIFICATION_APPROVE = "NOTIFICATION_APPROVE"
 
     SUPPORT_READ = "SUPPORT_READ"
     SUPPORT_UPDATE = "SUPPORT_UPDATE"
+    SUPPORT_MANAGE = "SUPPORT_MANAGE"
 
     AUDIT_READ = "AUDIT_READ"
+    REPORT_READ = "REPORT_READ"
+    REPORT_EXPORT = "REPORT_EXPORT"
 
     ADMIN_MANAGE = "ADMIN_MANAGE"
 
@@ -85,6 +97,7 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.DISBURSEMENT_READ,
             AdminPermission.LOAN_OFFER_ISSUE,
             AdminPermission.LOAN_OFFER_CANCEL,
+            AdminPermission.REPORT_READ,
         }
     ),
 
@@ -133,6 +146,7 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.LOAN_APPLICATION_READ,
             AdminPermission.SUPPORT_READ,
             AdminPermission.SUPPORT_UPDATE,
+            AdminPermission.NOTIFICATION_READ,
         }
     ),
 
@@ -151,6 +165,13 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.REPAYMENT_REVIEW,
             AdminPermission.PRICING_READ,
             AdminPermission.PRICING_MANAGE,
+            AdminPermission.RECONCILIATION_READ,
+            AdminPermission.RECONCILIATION_RUN,
+            AdminPermission.RECONCILIATION_REVIEW,
+            AdminPermission.COLLECTIONS_READ,
+            AdminPermission.NOTIFICATION_READ,
+            AdminPermission.NOTIFICATION_MANAGE,
+            AdminPermission.REPORT_READ,
         }
     ),
 
@@ -163,7 +184,12 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.LEDGER_READ,
             AdminPermission.REPAYMENT_READ,
             AdminPermission.PRICING_READ,
+            AdminPermission.RECONCILIATION_READ,
+            AdminPermission.COLLECTIONS_READ,
+            AdminPermission.NOTIFICATION_READ,
             AdminPermission.AUDIT_READ,
+            AdminPermission.REPORT_READ,
+            AdminPermission.REPORT_EXPORT,
         }
     ),
 

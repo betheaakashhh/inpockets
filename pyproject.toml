@@ -14,6 +14,7 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "sqlalchemy[asyncio]",
+    "asyncpg",
     "psycopg[binary]",
     "alembic",
     "redis",
@@ -39,6 +40,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "unit: tests that do not require PostgreSQL or Redis fixtures",
+]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
 

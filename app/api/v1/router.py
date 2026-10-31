@@ -31,6 +31,15 @@ from app.api.v1.admin_repayment import router as admin_repayment_router
 from app.api.v1.webhooks_payment import router as webhooks_payment_router
 from app.api.v1.admin_ledger import router as admin_ledger_router
 from app.api.v1.admin_pricing import router as admin_pricing_router
+from app.api.v1.admin_reconciliation import router as admin_reconciliation_router
+from app.api.v1.admin_collections import router as admin_collections_router
+from app.api.v1.notifications import router as notifications_router
+from app.api.v1.support import router as support_router
+from app.api.v1.admin_support import router as admin_support_router
+from app.api.v1.admin_notifications import router as admin_notifications_router
+from app.api.v1.admin_audit import router as admin_audit_router
+from app.api.v1.admin_reporting import router as admin_reporting_router
+from app.api.v1.webhooks_notification import router as webhooks_notification_router
 
 api_router = APIRouter()
 
@@ -180,4 +189,58 @@ api_router.include_router(
     admin_pricing_router,
     prefix="/admin/pricing",
     tags=["Admin Pricing"],
+)
+
+api_router.include_router(
+    admin_reconciliation_router,
+    prefix="/admin/reconciliation",
+    tags=["Admin Reconciliation"],
+)
+
+api_router.include_router(
+    admin_collections_router,
+    prefix="/admin/collections",
+    tags=["Admin Collections"],
+)
+
+api_router.include_router(
+    notifications_router,
+    prefix="/notifications",
+    tags=["Notifications"],
+)
+
+api_router.include_router(
+    admin_notifications_router,
+    prefix="/admin/notifications",
+    tags=["Admin Notifications"],
+)
+
+api_router.include_router(
+    webhooks_notification_router,
+    prefix="/webhooks",
+    tags=["Webhooks"],
+)
+
+api_router.include_router(
+    support_router,
+    prefix="/support",
+    tags=["Support"],
+)
+
+api_router.include_router(
+    admin_support_router,
+    prefix="/admin/support",
+    tags=["Admin Support"],
+)
+
+api_router.include_router(
+    admin_audit_router,
+    prefix="/admin/audit",
+    tags=["Admin Audit"],
+)
+
+api_router.include_router(
+    admin_reporting_router,
+    prefix="/admin/reports",
+    tags=["Admin Reports"],
 )
