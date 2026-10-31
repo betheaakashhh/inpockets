@@ -31,6 +31,8 @@ from app.api.v1.admin_repayment import router as admin_repayment_router
 from app.api.v1.webhooks_payment import router as webhooks_payment_router
 from app.api.v1.admin_ledger import router as admin_ledger_router
 from app.api.v1.admin_pricing import router as admin_pricing_router
+from app.api.v1.admin_reconciliation import router as admin_reconciliation_router
+from app.api.v1.admin_collections import router as admin_collections_router
 
 api_router = APIRouter()
 
@@ -180,4 +182,16 @@ api_router.include_router(
     admin_pricing_router,
     prefix="/admin/pricing",
     tags=["Admin Pricing"],
+)
+
+api_router.include_router(
+    admin_reconciliation_router,
+    prefix="/admin/reconciliation",
+    tags=["Admin Reconciliation"],
+)
+
+api_router.include_router(
+    admin_collections_router,
+    prefix="/admin/collections",
+    tags=["Admin Collections"],
 )

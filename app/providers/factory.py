@@ -132,3 +132,20 @@ def get_payment_provider() -> PaymentProvider:
         )
 
     raise RuntimeError(f"Unsupported payment provider: {provider}")
+
+
+from app.providers.settlement import SettlementProvider
+
+
+def get_settlement_provider() -> SettlementProvider:
+    settings = get_settings()
+    provider = settings.settlement_provider.lower()
+
+    if provider == "development":
+        if settings.environment.lower() == "production":
+            raise RuntimeError("Development settlement provider is not allowed in production")
+        from app.providers.settlement_development import DevelopmentSettlementProvider
+
+        return DevelopmentSettlementProvider()
+
+    raise RuntimeError(f"Unsupported settlement provider: {provider}")

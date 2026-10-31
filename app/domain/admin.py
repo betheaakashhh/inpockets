@@ -53,8 +53,13 @@ class AdminPermission(StrEnum):
     PRICING_MANAGE = "PRICING_MANAGE"
     PRICING_APPROVE = "PRICING_APPROVE"
 
+    RECONCILIATION_READ = "RECONCILIATION_READ"
+    RECONCILIATION_RUN = "RECONCILIATION_RUN"
+    RECONCILIATION_REVIEW = "RECONCILIATION_REVIEW"
+
     COLLECTIONS_READ = "COLLECTIONS_READ"
     COLLECTIONS_UPDATE = "COLLECTIONS_UPDATE"
+    COLLECTIONS_MANAGE = "COLLECTIONS_MANAGE"
 
     SUPPORT_READ = "SUPPORT_READ"
     SUPPORT_UPDATE = "SUPPORT_UPDATE"
@@ -151,6 +156,10 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.REPAYMENT_REVIEW,
             AdminPermission.PRICING_READ,
             AdminPermission.PRICING_MANAGE,
+            AdminPermission.RECONCILIATION_READ,
+            AdminPermission.RECONCILIATION_RUN,
+            AdminPermission.RECONCILIATION_REVIEW,
+            AdminPermission.COLLECTIONS_READ,
         }
     ),
 
@@ -163,6 +172,8 @@ ROLE_PERMISSIONS: dict[AdminRole, frozenset[AdminPermission]] = {
             AdminPermission.LEDGER_READ,
             AdminPermission.REPAYMENT_READ,
             AdminPermission.PRICING_READ,
+            AdminPermission.RECONCILIATION_READ,
+            AdminPermission.COLLECTIONS_READ,
             AdminPermission.AUDIT_READ,
         }
     ),
