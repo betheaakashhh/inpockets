@@ -16,13 +16,13 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_DB: inpockets
+          POSTGRES_DB: inpockets_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d inpockets"
+          --health-cmd "pg_isready -U postgres -d inpockets_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
@@ -53,7 +53,7 @@ jobs:
 
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/inpockets
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/inpockets_test
           REDIS_URL: redis://localhost:6379/0
           JWT_SECRET_KEY: ci-test-secret
           OTP_HASH_SECRET: ci-test-otp-secret
@@ -63,7 +63,7 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/inpockets
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/inpockets_test
           REDIS_URL: redis://localhost:6379/0
           JWT_SECRET_KEY: ci-test-secret
           OTP_HASH_SECRET: ci-test-otp-secret

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from app.domain.admin import AdminRole
@@ -57,9 +60,9 @@ class AuditLogService:
             request_id=request_id,
             ip_address=ip_address,
             reason=reason,
-            old_value=old_value,
-            new_value=new_value,
-            event_metadata=event_metadata,
+            old_value=_safe_snapshot(old_value, entity_type=entity_type),
+            new_value=_safe_snapshot(new_value, entity_type=entity_type),
+            event_metadata=_safe_snapshot(event_metadata),
         )
 
     async def record_customer_action(
@@ -86,13 +89,13 @@ class AuditLogService:
             request_id=request_id,
             ip_address=ip_address,
             reason=reason,
-            old_value=old_value,
-            new_value=new_value,
-            event_metadata={
+            old_value=_safe_snapshot(old_value, entity_type=entity_type),
+            new_value=_safe_snapshot(new_value, entity_type=entity_type),
+            event_metadata=_safe_snapshot({
                 **(event_metadata or {}),
                 "actor_type": "CUSTOMER",
                 "actor_user_id": str(actor_user_id),
-            },
+            }),
         )
 
     async def record_system_action(
@@ -114,10 +117,103 @@ class AuditLogService:
             entity_type=entity_type,
             entity_id=entity_id,
             reason=reason,
-            old_value=old_value,
-            new_value=new_value,
-            event_metadata={
+            old_value=_safe_snapshot(old_value, entity_type=entity_type),
+            new_value=_safe_snapshot(new_value, entity_type=entity_type),
+            event_metadata=_safe_snapshot({
                 **(event_metadata or {}),
                 "actor_type": "SYSTEM",
-            },
+            }),
         )
+
+
+_REDACTED_KEYS = {
+    "password", "password_hash", "access_token", "refresh_token", "token",
+    "otp", "otp_code", "secret", "api_key", "authorization", "pan",
+    "aadhaar", "account_number", "ifsc", "phone", "email", "document",
+    "raw_payload", "input_snapshot",
+}
+_NORMALIZED_REDACTED_KEYS = {
+    "".join(character for character in key.lower() if character.isalnum())
+    for key in _REDACTED_KEYS
+}
+_SENSITIVE_ENTITY_MARKERS = (
+    "customer",
+    "user",
+    "kyc",
+    "identity",
+    "document",
+    "bank",
+    "pan",
+    "aadhaar",
+    "biometric",
+)
+_SAFE_AUDIT_FIELDS = {
+    "action",
+    "actor_type",
+    "actoruserid",
+    "amount",
+    "code",
+    "decision",
+    "entityid",
+    "reason",
+    "reference",
+    "route",
+    "status",
+    "state",
+    "transactionid",
+}
+
+
+def _is_sensitive_key(key: str) -> bool:
+    normalized = "".join(character for character in key.lower() if character.isalnum())
+    return normalized in _NORMALIZED_REDACTED_KEYS or any(
+        marker in normalized
+        for marker in (
+            "password",
+            "token",
+            "otp",
+            "secret",
+            "apikey",
+            "authorization",
+            "pan",
+            "aadhaar",
+            "accountnumber",
+            "ifsc",
+            "bankaccount",
+            "beneficiary",
+            "phonenumber",
+            "emailaddress",
+            "rawpayload",
+            "inputsnapshot",
+        )
+    )
+
+
+def _safe_snapshot(value, *, entity_type: str | None = None):
+    """Return a JSON-safe, bounded snapshot without credentials or raw PII."""
+    if value is None:
+        return None
+    if isinstance(value, Mapping):
+        return {
+            str(key): "[REDACTED]"
+            if _is_sensitive_key(str(key))
+            or (
+                entity_type
+                and any(marker in entity_type.lower() for marker in _SENSITIVE_ENTITY_MARKERS)
+                and "".join(character for character in str(key).lower() if character.isalnum())
+                not in _SAFE_AUDIT_FIELDS
+            )
+            else _safe_snapshot(item, entity_type=entity_type)
+            for key, item in value.items()
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_safe_snapshot(item, entity_type=entity_type) for item in value[:100]]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, (str, int, float, bool)):
+        return value if not isinstance(value, str) or len(value) <= 500 else value[:497] + "..."
+    return str(value)[:500]

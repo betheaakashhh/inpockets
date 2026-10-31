@@ -1,28 +1,51 @@
 import asyncio
+import re
 import selectors
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 from sqlalchemy import delete, text
-from uuid import uuid4
+
 from app.core.config import get_settings
 from app.db.session import get_db_session
-from app.models.otp_verification import OTPVerification
-from app.models.user import User
-from app.models.document import Document
+from app.models.admin_user import AdminUser
+from app.models.identity_verification import IdentityVerification
 from app.models.kyc_document import KYCDocument
 from app.models.kyc_record import KYCRecord
+from app.models.otp_verification import OTPVerification
 from app.models.pan_verification import PANVerification
-from app.models.identity_verification import IdentityVerification
-from app.models.user_session import UserSession
-from app.models.admin_user import AdminUser
 from app.models.policy_evaluation import PolicyEvaluation
 from app.models.policy_rule import PolicyRule
 from app.models.policy_version import PolicyVersion
-
+from app.models.user import User
+from app.models.user_session import UserSession
 
 settings = get_settings()
+
+
+def assert_safe_test_database(
+    database_name: str | None,
+    database_user: str | None,
+    environment: str,
+) -> None:
+    if environment.lower() in {"production", "prod", "staging"}:
+        raise RuntimeError(
+            "Refusing destructive test cleanup in production or staging"
+        )
+    if not database_name or not re.search(
+        r"(^|[_-])test([_-]|$)", database_name.lower()
+    ):
+        raise RuntimeError(
+            "Refusing destructive test cleanup: connected database "
+            f"'{database_name}' is not a dedicated test database"
+        )
+    if not database_user:
+        raise RuntimeError(
+            "Refusing destructive test cleanup: database identity "
+            "could not be safely verified"
+        )
 
 
 @pytest.fixture(scope="session")
@@ -35,8 +58,14 @@ def event_loop_policy():
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clean_database() -> None:
+async def clean_database(request) -> None:
+    if request.node.get_closest_marker("unit"):
+        return
     async for session in get_db_session():
+        database_name, database_user = (
+            await session.execute(text("SELECT current_database(), current_user"))
+        ).one()
+        assert_safe_test_database(database_name, database_user, settings.environment)
         await session.execute(delete(PolicyEvaluation))
         await session.execute(delete(PolicyRule))
         await session.execute(delete(PolicyVersion))
@@ -66,7 +95,9 @@ async def db_session():
         break
 
 @pytest_asyncio.fixture(autouse=True)
-async def clean_redis() -> None:
+async def clean_redis(request) -> None:
+    if request.node.get_closest_marker("unit"):
+        return
     redis_client = Redis.from_url(
         settings.redis_url,
         decode_responses=True,
