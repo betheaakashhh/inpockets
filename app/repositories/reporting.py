@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Select, String, case, func, select, union_all
+from sqlalchemy import Select, String, case, exists, func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.ledger import LOAN_PRINCIPAL
+from app.domain.ledger import (
+    BANK,
+    INTEREST_INCOME,
+    LOAN_PRINCIPAL,
+    PENAL_INCOME,
+    UNAPPLIED_RECEIPTS,
+)
 from app.models.collection import CollectionCase
 from app.models.credit_assessment import CreditAssessment
 from app.models.disbursement import Disbursement
@@ -82,10 +88,75 @@ class ReportingRepository:
         ]
 
     async def disbursements(self, **filters) -> list[dict]:
+        # Aggregate the bank lines before joining to operational payout rows.
+        # A disbursement reversal has the same source id as its original
+        # transaction, so this produces one net cash figure per attempt.
+        bank_movement = case(
+            (LedgerEntry.direction == "DEBIT", LedgerEntry.amount),
+            else_=-LedgerEntry.amount,
+        )
+        ledger_by_disbursement = (
+            select(
+                LedgerTransaction.source_id.label("disbursement_id"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (LedgerAccount.code == BANK, -bank_movement),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("net_disbursed_amount"),
+            )
+            .select_from(LedgerTransaction)
+            .join(LedgerEntry, LedgerEntry.transaction_id == LedgerTransaction.id)
+            .join(LedgerAccount, LedgerAccount.id == LedgerEntry.account_id)
+            .where(LedgerTransaction.source_type == "disbursement")
+            .group_by(LedgerTransaction.source_id)
+            .subquery()
+        )
         query = select(
             Disbursement.status.label("status"),
             func.count(Disbursement.id).label("count"),
-            func.coalesce(func.sum(Disbursement.amount), 0).label("amount"),
+            # `amount` remains for existing clients. It is an operational
+            # attempt total, not a cash-disbursed total.
+            func.coalesce(func.sum(Disbursement.amount), 0).label("attempted_amount"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Disbursement.status == "FAILED", Disbursement.amount),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("failed_amount"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            Disbursement.status.in_(("SUCCESS", "REVERSED")),
+                            Disbursement.amount,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("gross_successful_amount"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Disbursement.status == "REVERSED", Disbursement.amount),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("reversed_amount"),
+            func.coalesce(func.sum(ledger_by_disbursement.c.net_disbursed_amount), 0).label(
+                "net_disbursed_amount"
+            ),
+        ).outerjoin(
+            ledger_by_disbursement,
+            ledger_by_disbursement.c.disbursement_id == Disbursement.id,
         )
         query = self._date_filter(query, Disbursement.created_at, filters)
         result = await self.session.execute(
@@ -93,7 +164,17 @@ class ReportingRepository:
             .offset(filters["offset"]).limit(filters["limit"] + 1)
         )
         return [
-            {"status": row.status, "count": row.count, "amount": str(row.amount)}
+            {
+                "status": row.status,
+                "count": row.count,
+                "amount": str(row.attempted_amount),
+                "attempted_amount": str(row.attempted_amount),
+                "failed_amount": str(row.failed_amount),
+                "gross_successful_amount": str(row.gross_successful_amount),
+                "reversed_amount": str(row.reversed_amount),
+                "net_disbursed_amount": str(row.net_disbursed_amount),
+                "financial_basis": "ledger_bank_clearing",
+            }
             for row in result
         ]
 
@@ -116,9 +197,18 @@ class ReportingRepository:
         schedule_row = (await self.session.execute(schedule_query)).one()
         installment_row = (await self.session.execute(installment_query)).one()
 
+        # Asset-account balance is debit minus credit.  Do not join schedules:
+        # an offer can retain CANCELLED historical schedules, which would
+        # multiply every ledger entry.  EXISTS only establishes eligibility.
         ledger_balance = case(
             (LedgerEntry.direction == "DEBIT", LedgerEntry.amount),
             else_=-LedgerEntry.amount,
+        )
+        has_active_schedule = exists(
+            select(RepaymentSchedule.id).where(
+                RepaymentSchedule.loan_offer_id == LedgerTransaction.loan_offer_id,
+                RepaymentSchedule.status == "ACTIVE",
+            )
         )
         ledger_query = select(
             func.coalesce(func.sum(ledger_balance), 0).label("outstanding_principal"),
@@ -136,33 +226,125 @@ class ReportingRepository:
                 ),
                 0,
             ).label("adjustment_activity"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            LedgerTransaction.kind.in_(("REPAYMENT", "REPAYMENT_REVERSAL")),
+                            -ledger_balance,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("net_repayment_principal_reduction"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            LedgerTransaction.kind.in_(
+                                ("DISBURSEMENT", "DISBURSEMENT_REVERSAL")
+                            ),
+                            ledger_balance,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("net_disbursed_principal"),
         ).select_from(LedgerEntry).join(
             LedgerTransaction, LedgerTransaction.id == LedgerEntry.transaction_id
         ).join(
             LedgerAccount, LedgerAccount.id == LedgerEntry.account_id
-        ).join(
-            RepaymentSchedule,
-            RepaymentSchedule.loan_offer_id == LedgerTransaction.loan_offer_id,
         ).where(
             LedgerAccount.code == LOAN_PRINCIPAL,
-            RepaymentSchedule.status == "ACTIVE",
+            has_active_schedule,
         )
         ledger_row = (await self.session.execute(ledger_query)).one()
+        schedule_to_ledger_variance = ledger_row.outstanding_principal - (
+            schedule_row.principal_due
+            - ledger_row.net_repayment_principal_reduction
+            + ledger_row.adjustment_activity
+        )
+        accounting_formula_variance = ledger_row.outstanding_principal - (
+            ledger_row.net_disbursed_principal
+            - ledger_row.net_repayment_principal_reduction
+            + ledger_row.adjustment_activity
+        )
         return [{
             "principal_due": str(schedule_row.principal_due),
-            "principal_paid": str(
-                schedule_row.principal_due - ledger_row.outstanding_principal
-            ),
+            # Compatibility field: this is now the ledger-derived repayment
+            # reduction, never scheduled principal minus the current balance.
+            "principal_paid": str(ledger_row.net_repayment_principal_reduction),
             "outstanding_principal": str(ledger_row.outstanding_principal),
             "interest_due": str(installment_row.interest_due),
             "fee_due": str(installment_row.fee_due),
             "installments": installment_row.installments,
             "ledger_adjustment_activity": str(ledger_row.adjustment_activity),
+            "net_repayment_principal_reduction": str(
+                ledger_row.net_repayment_principal_reduction
+            ),
+            "net_disbursed_principal": str(ledger_row.net_disbursed_principal),
+            "adjustment_principal_effect": str(ledger_row.adjustment_activity),
+            "schedule_to_ledger_variance": str(schedule_to_ledger_variance),
+            "accounting_formula_variance": str(accounting_formula_variance),
             "as_of": "current",
             "historical": False,
         }]
 
     async def repayments(self, **filters) -> list[dict]:
+        # Repayment rows are operational state.  Financial quantities come
+        # from the per-payment ledger aggregate so an exact reversal cancels
+        # the original posting rather than leaving allocations in the report.
+        bank_movement = case(
+            (LedgerEntry.direction == "DEBIT", LedgerEntry.amount),
+            else_=-LedgerEntry.amount,
+        )
+        credit_movement = case(
+            (LedgerEntry.direction == "CREDIT", LedgerEntry.amount),
+            else_=-LedgerEntry.amount,
+        )
+        ledger_by_payment = (
+            select(
+                LedgerTransaction.source_id.label("payment_id"),
+                func.coalesce(
+                    func.sum(
+                        case((LedgerAccount.code == BANK, bank_movement), else_=0)
+                    ),
+                    0,
+                ).label("retained_net_amount"),
+                func.coalesce(
+                    func.sum(
+                        case((LedgerAccount.code == LOAN_PRINCIPAL, credit_movement), else_=0)
+                    ),
+                    0,
+                ).label("principal_applied"),
+                func.coalesce(
+                    func.sum(
+                        case((LedgerAccount.code == INTEREST_INCOME, credit_movement), else_=0)
+                    ),
+                    0,
+                ).label("interest_applied"),
+                func.coalesce(
+                    func.sum(
+                        case((LedgerAccount.code == PENAL_INCOME, credit_movement), else_=0)
+                    ),
+                    0,
+                ).label("fee_applied"),
+                func.coalesce(
+                    func.sum(
+                        case((LedgerAccount.code == UNAPPLIED_RECEIPTS, credit_movement), else_=0)
+                    ),
+                    0,
+                ).label("unapplied_amount"),
+            )
+            .select_from(LedgerTransaction)
+            .join(LedgerEntry, LedgerEntry.transaction_id == LedgerTransaction.id)
+            .join(LedgerAccount, LedgerAccount.id == LedgerEntry.account_id)
+            .where(LedgerTransaction.source_type == "repayment_payment")
+            .group_by(LedgerTransaction.source_id)
+            .subquery()
+        )
         query = select(
             RepaymentPayment.status.label("status"),
             func.count(RepaymentPayment.id).label("count"),
@@ -179,19 +361,22 @@ class ReportingRepository:
                 ),
                 0,
             ).label("gross_successful_amount"),
-            func.coalesce(
-                func.sum(
-                    case(
-                        (RepaymentPayment.status == "SUCCESS", RepaymentPayment.amount),
-                        else_=0,
-                    )
-                ),
-                0,
-            ).label("retained_net_amount"),
-            func.coalesce(func.sum(RepaymentPayment.principal_applied), 0).label("principal_applied"),
-            func.coalesce(func.sum(RepaymentPayment.interest_applied), 0).label("interest_applied"),
-            func.coalesce(func.sum(RepaymentPayment.fee_applied), 0).label("fee_applied"),
-            func.coalesce(func.sum(RepaymentPayment.unapplied_amount), 0).label("unapplied_amount"),
+            func.coalesce(func.sum(ledger_by_payment.c.retained_net_amount), 0).label(
+                "retained_net_amount"
+            ),
+            func.coalesce(func.sum(ledger_by_payment.c.principal_applied), 0).label(
+                "principal_applied"
+            ),
+            func.coalesce(func.sum(ledger_by_payment.c.interest_applied), 0).label(
+                "interest_applied"
+            ),
+            func.coalesce(func.sum(ledger_by_payment.c.fee_applied), 0).label("fee_applied"),
+            func.coalesce(func.sum(ledger_by_payment.c.unapplied_amount), 0).label(
+                "unapplied_amount"
+            ),
+        ).outerjoin(
+            ledger_by_payment,
+            ledger_by_payment.c.payment_id == RepaymentPayment.id,
         )
         query = self._date_filter(query, RepaymentPayment.created_at, filters)
         result = await self.session.execute(
@@ -210,6 +395,11 @@ class ReportingRepository:
                 "interest_applied": str(row.interest_applied),
                 "fee_applied": str(row.fee_applied),
                 "unapplied_amount": str(row.unapplied_amount),
+                "net_principal_applied": str(row.principal_applied),
+                "net_interest_applied": str(row.interest_applied),
+                "net_fee_applied": str(row.fee_applied),
+                "net_unapplied_amount": str(row.unapplied_amount),
+                "financial_basis": "ledger_postings",
             }
             for row in result
         ]
@@ -345,19 +535,88 @@ class ReportingRepository:
         ]
 
     async def reconciliation(self, **filters) -> list[dict]:
+        amount_comparable = (
+            ReconciliationRecord.internal_amount.is_not(None)
+            & ReconciliationRecord.external_amount.is_not(None)
+        )
+        ledger_comparable = (
+            ReconciliationRecord.ledger_net.is_not(None)
+            & ReconciliationRecord.expected_ledger_net.is_not(None)
+        )
         query = select(
             ReconciliationRecord.flow.label("flow"),
+            ReconciliationRecord.status.label("status"),
             ReconciliationRecord.discrepancy.label("discrepancy"),
             func.count(ReconciliationRecord.id).label("count"),
+            func.count(ReconciliationRecord.internal_amount).label("internal_amount_count"),
+            func.sum(ReconciliationRecord.internal_amount).label("internal_amount_total"),
+            func.count(ReconciliationRecord.external_amount).label("external_amount_count"),
+            func.sum(ReconciliationRecord.external_amount).label("external_amount_total"),
+            func.count().filter(amount_comparable).label("amount_comparison_count"),
+            func.sum(
+                case(
+                    (
+                        amount_comparable,
+                        ReconciliationRecord.external_amount - ReconciliationRecord.internal_amount,
+                    ),
+                    else_=None,
+                )
+            ).label("external_minus_internal_total"),
+            func.count(ReconciliationRecord.ledger_net).label("ledger_net_count"),
+            func.sum(ReconciliationRecord.ledger_net).label("ledger_net_total"),
+            func.count(ReconciliationRecord.expected_ledger_net).label(
+                "expected_ledger_net_count"
+            ),
+            func.sum(ReconciliationRecord.expected_ledger_net).label(
+                "expected_ledger_net_total"
+            ),
+            func.count().filter(ledger_comparable).label("ledger_comparison_count"),
+            func.sum(
+                case(
+                    (
+                        ledger_comparable,
+                        ReconciliationRecord.ledger_net
+                        - ReconciliationRecord.expected_ledger_net,
+                    ),
+                    else_=None,
+                )
+            ).label("ledger_minus_expected_total"),
         ).where(ReconciliationRecord.status != "MATCHED")
         query = self._date_filter(query, ReconciliationRecord.created_at, filters)
         result = await self.session.execute(
-            query.group_by(ReconciliationRecord.flow, ReconciliationRecord.discrepancy)
-            .order_by(ReconciliationRecord.flow, ReconciliationRecord.discrepancy)
+            query.group_by(
+                ReconciliationRecord.flow,
+                ReconciliationRecord.status,
+                ReconciliationRecord.discrepancy,
+            )
+            .order_by(
+                ReconciliationRecord.flow,
+                ReconciliationRecord.status,
+                ReconciliationRecord.discrepancy,
+            )
             .offset(filters["offset"]).limit(filters["limit"] + 1)
         )
         return [
-            {"flow": row.flow, "discrepancy": row.discrepancy, "count": row.count}
+            {
+                "flow": row.flow,
+                "status": row.status,
+                "discrepancy": row.discrepancy,
+                "count": row.count,
+                "internal_amount_count": row.internal_amount_count,
+                "internal_amount_total": self._amount(row.internal_amount_total),
+                "external_amount_count": row.external_amount_count,
+                "external_amount_total": self._amount(row.external_amount_total),
+                "amount_comparison_count": row.amount_comparison_count,
+                "external_minus_internal_total": self._amount(
+                    row.external_minus_internal_total
+                ),
+                "ledger_net_count": row.ledger_net_count,
+                "ledger_net_total": self._amount(row.ledger_net_total),
+                "expected_ledger_net_count": row.expected_ledger_net_count,
+                "expected_ledger_net_total": self._amount(row.expected_ledger_net_total),
+                "ledger_comparison_count": row.ledger_comparison_count,
+                "ledger_minus_expected_total": self._amount(row.ledger_minus_expected_total),
+            }
             for row in result
         ]
 
@@ -443,3 +702,8 @@ class ReportingRepository:
         if column is not None and filters["end_at"]:
             query = query.where(column < filters["end_at"])
         return query
+
+    @staticmethod
+    def _amount(value) -> str | None:
+        """Keep an unavailable financial aggregate distinct from a zero amount."""
+        return None if value is None else str(value)

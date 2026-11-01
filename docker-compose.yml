@@ -1,4 +1,28 @@
 services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    command: python -m pytest -q
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/inpockets_test
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: test-only-secret
+      OTP_HASH_SECRET: test-only-otp-secret
+      SMS_PROVIDER: development
+      PAN_PROVIDER: development
+      KYC_PROVIDER: development
+      DOCUMENT_STORAGE_PROVIDER: development
+      IDENTITY_VERIFICATION_PROVIDER: development
+      DISBURSEMENT_PROVIDER: development
+      PAYMENT_PROVIDER: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   api:
     build:
       context: .
