@@ -31,8 +31,10 @@ async def test_exposure_query_uses_ledger_principal_balance():
                 ),
                 SimpleNamespace(
                     one=lambda: SimpleNamespace(
-                        outstanding_principal=75,
+                        outstanding_principal=80,
                         adjustment_activity=5,
+                        net_repayment_principal_reduction=25,
+                        net_disbursed_principal=100,
                     )
                 ),
             ]
@@ -46,8 +48,10 @@ async def test_exposure_query_uses_ledger_principal_balance():
         offset=0,
     )
 
-    assert rows[0]["outstanding_principal"] == "75"
+    assert rows[0]["outstanding_principal"] == "80"
     assert rows[0]["principal_paid"] == "25"
+    assert rows[0]["schedule_to_ledger_variance"] == "0"
+    assert rows[0]["accounting_formula_variance"] == "0"
     statements = [call.args[0] for call in session.execute.await_args_list]
     ledger_sql = _sql(statements[2])
     assert "ledger_transactions" in ledger_sql
@@ -55,6 +59,7 @@ async def test_exposure_query_uses_ledger_principal_balance():
     assert "code_1" not in ledger_sql.lower()
     assert "ledger_accounts.code =" in ledger_sql.lower()
     assert "principal_paid" not in ledger_sql.lower()
+    assert "exists" in ledger_sql.lower()
 
 
 @pytest.mark.asyncio
@@ -68,8 +73,8 @@ async def test_repayment_report_separates_reversed_cash_from_retained_cash():
                     attempted_amount=100,
                     gross_successful_amount=100,
                     retained_net_amount=0,
-                    principal_applied=80,
-                    interest_applied=20,
+                    principal_applied=0,
+                    interest_applied=0,
                     fee_applied=0,
                     unapplied_amount=0,
                 )
@@ -92,10 +97,15 @@ async def test_repayment_report_separates_reversed_cash_from_retained_cash():
             "gross_successful_amount": "100",
             "retained_net_amount": "0",
             "confirmed_amount": "0",
-            "principal_applied": "80",
-            "interest_applied": "20",
+                "principal_applied": "0",
+                "interest_applied": "0",
             "fee_applied": "0",
             "unapplied_amount": "0",
+                "net_principal_applied": "0",
+                "net_interest_applied": "0",
+                "net_fee_applied": "0",
+                "net_unapplied_amount": "0",
+                "financial_basis": "ledger_postings",
         }
     ]
 

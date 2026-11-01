@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.14-slim AS base
 
 WORKDIR /app
 
@@ -12,6 +12,10 @@ COPY alembic ./alembic
 
 RUN python -m pip install --upgrade pip \
     && pip install .
+
+FROM base AS test
+COPY tests ./tests
+RUN python -m pip install ".[dev]"
 
 EXPOSE 8000
 
